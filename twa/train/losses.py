@@ -1,0 +1,73 @@
+import torch
+import torch.nn.functional as F
+import numpy as np
+from torch.autograd import Function
+
+def slice_to_loss(recon_x, x, pad):
+    """
+    Slices prediction and truth for loss computation
+    """
+    batch_size = x.shape[0]
+    c = x.shape[1]
+    spatial = x.shape[2:]
+    recon_x = recon_x.reshape(batch_size, c, *spatial)
+    slices = [slice(0, sd) for sd in x.shape[:2]] + [slice(pad, sd - pad) for sd in spatial]
+    recon_x = recon_x[slices]
+    x = x[slices]
+    return recon_x, x
+
+################################################## Reconstruction losses ###############################################
+
+def euclidean_loss(recon_x, x, pad=0, reduce=True):
+    """
+    Euclidean loss
+    """
+    recon_x, x = slice_to_loss(recon_x, x, pad)
+    if reduce:
+        return ((recon_x - x) ** 2).mean()
+    else:
+        return ((recon_x - x) ** 2)
+
+def normalized_euclidean(recon,gt, eps=1e-5, norm_type='single', measurement='speed', reduce=True):
+
+    '''Euclidean distance between two arrays with spatial dimensions. Normalizes pointwise across the spatial dimension by the norm of the second argument'''
+    batch_size =recon.shape[0]
+    w_gt = torch.tensor(1.0)
+    if measurement=='speed':
+        w_gt = 1 / (torch.sqrt(gt[:, 0]**2 + gt[:, 1]**2).unsqueeze(1) + eps)
+    elif measurement == 'nullclines':
+        w_gt = 1 / (2*torch.sqrt(gt[:, 0]**2).unsqueeze(1) + eps) + 1 / (2*torch.sqrt(gt[:, 1]**2).unsqueeze(1) + eps)
+    # elif measurement == 'direction':
+    #     torch.cosine_similarity(recon - coords, gt - coords, dim=1).unsqueeze(1)
+    # elif measurement == 'jacobian':
+    #     m_r = torch.real(torch.linalg.det(jacobian(recon).permute(0,3,4,1,2))).unsqueeze(1)
+    #     m_gt = torch.real(torch.linalg.det(jacobian(gt).permute(0,3,4,1,2))).unsqueeze(1)
+    # elif measurement == 'divergence':
+    #     m_r = divergence(recon).unsqueeze(1).abs()
+    #     m_gt = divergence(gt).unsqueeze(1).abs()
+    # elif measurement == 'curl':
+    #     m_r = (curl(recon)**2).sum(1).unsqueeze(1)
+    #     m_gt = (curl(gt)**2).sum(1).unsqueeze(1)
+    # elif measurement == 'laplacian':
+    #     # Should you use the inverse of this?
+    #     m_r = (laplacian(recon)**2).sum(1).unsqueeze(1)
+    #     m_gt = (laplacian(gt)**2).sum(1).unsqueeze(1)
+    # else:
+        # raise ValueError('Measurement not recognized!')
+
+    # if norm_type == 'single':
+    #     den = m_gt + eps
+    # # elif norm_type == 'product':
+    # #     den = m_gt * m_recon + eps
+    # # elif norm_type == 'sum':
+    # #     den = m_gt + m_recon + eps
+    # else:
+    #     raise ValueError('Denominator type not recognized!')
+
+    # normalize pointwise by gt norm
+    if reduce:
+        d = torch.sqrt((((recon- gt)**2) * w_gt).reshape(batch_size,-1).mean(1))
+        return d.mean()
+    else:
+        d = torch.sqrt((((recon- gt)**2) * w_gt))
+        return d

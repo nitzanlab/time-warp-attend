@@ -106,13 +106,13 @@ def plot_tradeoff(L, xcol='pc', ycol='l1', xlabel='Sampling probability', ylabel
 
 
 
-def plot_diverge_scale(x, y, c, xlabel='', ylabel='', colorlabel='', title='', ax=None, add_colorbar=True, fontsize=20, labelsize=15, s=20, nticks=3):
+def plot_diverge_scale(x, y, c, xlabel='', ylabel='', colorlabel='', title='', ax=None, add_colorbar=True, fontsize=20, labelsize=15, s=20, nticks=3, vmin=None, vmax=None):
     if ax is None:
         # fig = plt.figure()
         fig, ax = plt.subplots(constrained_layout=True, tight_layout=False)
     plt.set_cmap('coolwarm')
-    vmax = np.abs(c).max()
-    vmin = -vmax
+    vmax = np.abs(c).max() if vmax is None else vmax
+    vmin = -vmax if vmin is None else vmin
     norm = colors.TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     pl = ax.scatter(x, y, c=c, norm=norm, s=s) #colormap='bwr'
     
@@ -142,14 +142,14 @@ def plot_diverge_scale(x, y, c, xlabel='', ylabel='', colorlabel='', title='', a
 # y = sysp[:,1]
 # z = exp_output[sys][:,1]
 
-def get_prediction(x,y,z, npts=40, p=0.5):
+def get_prediction(x,y,z, npts=40, ord=2, lambd=1):
     A_func = lambda x,y: np.array([x*0+1, x, y, x**2, x**2*y, x**2*y**2, y**2, x*y**2, x*y]).T
     A = A_func(x,y)
 
-    p = 0.5
+    
     # solve least error with variable norm, p
     coeff_lstq, r, rank, s = np.linalg.lstsq(A, z)
-    sol = minimize(lambda c: np.linalg.norm(A @ c - z, ord=p) + np.linalg.norm(c, ord=2), coeff_lstq)
+    sol = minimize(lambda c: np.linalg.norm(A @ c - z, ord=ord) + lambd * np.linalg.norm(c, ord=2), coeff_lstq)
     # 
     coeff = sol.x
 

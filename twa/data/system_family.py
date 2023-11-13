@@ -39,14 +39,29 @@ class SystemFamily():
         if data_name == 'simple_oscillator' or data_name == 'so':
             generator = SimpleOscillator
 
+        # elif data_name == 'point_attractor' or data_name == 'pa':
+        #     generator = PointAttractor
+
         elif data_name == 'selkov':
             generator = Selkov
 
         elif data_name == 'suphopf':
             generator = SupercriticalHopf
 
+        elif data_name == 'prey_preditor' or data_name == 'pp':
+            generator = PreyPredator
+
         elif data_name == 'bzreaction' or data_name == 'bz':
             generator = BZreaction
+
+        elif data_name == 'fitzhugh_nagumo' or data_name == 'fn':
+            generator = FitzhughNagumo
+
+        elif data_name == 'vanderpol' or data_name == 'vp':
+            generator = VanDerPol
+
+        elif data_name == 'biased_vanderpol' or data_name == 'bvp':
+            generator = BiasedVanDerPol
 
         elif data_name == 'polynomial':
             generator = Polynomial
@@ -57,6 +72,11 @@ class SystemFamily():
         elif data_name == 'lienard_sigmoid':
             generator = LienardSigmoid
 
+        elif data_name == 'infinite_period' or data_name == 'ip':
+            generator = InfinitePeriod
+
+        elif data_name == 'repressilator':
+            generator = Repressilator
         else:
             raise ValueError(f'Unknown data, `{data_name}`! Try `simple_oscillator`.')
 
@@ -323,7 +343,7 @@ class SystemFamily():
         """
         Generate original and perturbed params and flows
         """
-        # kwargs = {**self.data_info, **kwargs}
+        
         sampler = SystemFamily.get_sampler(sampler_type)
         params = params if params else sampler(self, num_samples)
         
@@ -346,6 +366,10 @@ class SystemFamily():
 
         topos = []
         topos_pert = []
+
+        poly_params = []
+        poly_params_pert = []
+
 
         for p, p_pert in zip(params, params_pert):
 
@@ -380,8 +404,6 @@ class SystemFamily():
             if add_sand:
                 image = DE.get_sand_image()
                 image_pert = image if no_pert else DE_pert.get_sand_image()
-                # v = np.concatenate([v, np.expand_dims(image, axis=-1)], axis=-1)
-                # v_pert = np.concatenate([v_pert, np.expand_dims(image_pert, axis=-1)], axis=-1)
                 sand.append(image)
                 sand_pert.append(image_pert)
 
@@ -393,7 +415,17 @@ class SystemFamily():
                 print(f'WARNING: more than {max_topos} topologies found for {self.data_name}. Truncating to first {max_topos}.')
                 tps = tps[:max_topos]
             
-
+            pp = DE.get_polynomial_representation()
+            pp = pp if pp else DE.fit_polynomial_representation()
+            if np.isclose(v, v_pert).all(): # no perturbation
+                pp_pert = pp
+            else:
+                pp_pert = DE_pert.fit_polynomial_representation(coords=coords, vectors=v_pert)
+            
+            pp = np.stack(pp).T.flatten()
+            pp_pert = np.stack(pp_pert).T.flatten()
+            
+            
             fixed_pts_pert.append(fp_pert)
             fixed_pts.append(fp)
             dists_pert.append(dist_pert)
@@ -404,6 +436,9 @@ class SystemFamily():
             DEs_pert.append(DE_pert)
             topos.append(tps)
             topos_pert.append(tps)
+            poly_params.append(pp)
+            poly_params_pert.append(pp_pert)
+
         
 
         vectors = np.stack(vectors)
@@ -420,25 +455,6 @@ class SystemFamily():
         dists = np.stack(dists)
         dists_pert  = np.stack(dists_pert)
         
-        
-        poly_params = []
-        poly_params_pert = []
-
-        for DE, DE_pert, v, v_pert in zip(DEs, DEs_pert, vectors, vectors_pert):
-            
-            pp = DE.get_polynomial_representation()
-            pp = pp if pp else DE.fit_polynomial_representation()
-            if np.isclose(v, v_pert).all(): # no perturbation
-                pp_pert = pp
-            else:
-                pp_pert = DE_pert.fit_polynomial_representation(coords=coords, vectors=v_pert)
-            
-            pp = np.stack(pp).T.flatten()
-            pp_pert = np.stack(pp_pert).T.flatten()
-            
-            poly_params.append(pp)
-            poly_params_pert.append(pp_pert)
-
         poly_params = np.stack(poly_params)
         poly_params_pert  = np.stack(poly_params_pert)
 
@@ -460,41 +476,7 @@ class SystemFamily():
                'topos': topos
                 }
 
-    # def make_data(self, test_size, train_size, sampler_type='uniform', noise_type=None, **kwargs):
-    #     """
-    #     Generates data of system
-    #     """
-    #     ensure_dir(self.data_dir)
-        # train_dir = os.path.abspath(os.path.join(self.data_dir, 'train', '0'))
-        # test_dir = os.path.abspath(os.path.join(self.data_dir, 'test', '0'))
-
-        # for dr in [train_dir, test_dir]:
-        #     if not os.path.exists(dr):
-        #         os.makedirs(dr)
-
-        # num_samples = test_size + train_size
-        # params_pert, flow_pert, _, _, params, flow, _, _ = self.generate_flows(num_samples=num_samples, noise_type=noise_type, sampler_type=sampler_type, **kwargs)
-
-        # all_data   = torch.stack(all_data).numpy().transpose(0,3,1,2)
-        # all_pars   = torch.stack(all_pars).numpy()
-        # all_labels = np.array(all_labels)
-
-        # split = train_test_split(params_pert, flow_pert, params, flow, test_size=test_size, train_size=train_size, stratify=all_labels, random_state=seed)
-        # filenames = ['p_pert', 'X_pert', 'p', 'X'] * ['_'] * ['train', 'test']
-        # for dt, nm in zip(split, ['X_train', 'X_test', 'y_train', 'y_test', 'p_train', 'p_test']):
-        #     np.save(os.path.join(self.data_dir, nm + '.npy'), dt)
-
-        # for dt, dr, nm in zip([all_params[:, :num_samples], all_params[:, num_samples:]], [train_dir, test_dir], ['Train', 'Test']):
-        #     print('Generating {} Set'.format(nm))
-        #     for d, params in tqdm(enumerate(dt.T)):
-        #         #data = np.array([.1, .05, .0545, .062])
-
-        #         flow = self.generate_flow(params)
-
-        #         fn = os.path.join(dr,  'flow%05i.pkl' % d)
-        #         with open(fn, 'wb') as f:
-        #             pickle.dump((flow, params), f)
-
+    
 ######################################## Plotting ########################################################
 
     def plot_noised_vector_fields(self, num_samples, noise_type, noise_level, params=None, add_trajectories=False, title='', **kwargs):
@@ -542,47 +524,7 @@ class SystemFamily():
             if add_trajectories:
                 ax = axs[skip*i+1]
                 model.plot_trajectory(ax=ax)
-        # plt.suptitle(self.data_name)
+    
         plt.tight_layout()
         plt.show()
 
-
-
-if __name__ == '__main__':
-    # poly_order = 3
-    # dim = 2
-    # nparams = library_size(dim, poly_order=poly_order) * 2
-    # sf = SystemFamily(data_name='polynomial', param_ranges=[[-2, 2]] * nparams, data_dir=None, device='cpu', poly_order=poly_order)
-    # sf.plot_vector_fields(param_selection='random', num_samples=4, add_trajectories=True)
-    # plt.show()
-
-    # params = [10, 28, 8/3]
-    # param_ranges = np.array([params]).T @ np.array([[0.5, 1.5]])
-    # param_ranges = param_ranges.tolist()
-    # min_dims = [-30, -30, 0]
-    # max_dims = [30, 30, 60]
-    # poly_order = 2
-    # sf = SystemFamily(data_name='lorenz', param_ranges=param_ranges, data_dir=None, device='cpu', poly_order=poly_order)
-    # sf.plot_vector_fields(sampler_type='random', num_samples=4, add_trajectories=True)
-    # plt.show()
-
-    # poly_order = 3
-    # dim = 2
-    # nparams = library_size(dim, poly_order=poly_order) * 2
-    # sf = SystemFamily(data_name='polynomial', param_ranges=[[-2, 2]] * nparams, device='cpu', poly_order=poly_order, num_lattice=20)
-
-    
-    dim = 2
-    nparams = 1
-    sf = SystemFamily(data_name='saddle_node', param_ranges=[[-2, 2]] * nparams, device='cpu', num_lattice=20, min_dims = [-2, -2], max_dims = [2, 2])
-
-
-    noise_types_levels = {
-                        'mask':0.1, 
-                        'gaussian':0.1, 
-                        # 'params_gaussian':0.1, 
-                        # 'trajectory': 200
-                        }
-    # for noise_type, noise_level in noise_types_levels.items():
-    #     sf.plot_noised_vector_fields(num_samples=2, noise_type=noise_type, noise_level=noise_level, add_trajectories=False, title=noise_type)
-    

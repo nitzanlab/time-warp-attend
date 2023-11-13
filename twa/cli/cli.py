@@ -1,14 +1,11 @@
 import os
-import sys
 import click
-import uuid
 import time
 import numpy as np
 import pandas as pd
 import time
-from twa.cli.utils import PythonLiteralOption
 
-from twa.train import train_model, predict_model, VecTopoDataset
+from twa.train import predict_model, VecTopoDataset, train_model_alt
 from .utils import command_with_config
 from twa.utils import ensure_dir, ensure_device, write_yaml, str_to_list
 from twa.data import SystemFamily
@@ -89,15 +86,9 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-
-    # save_dir = os.path.join(data_dir, data_name)
+    
     ensure_dir(data_dir)
 
-    # read config file
-    # data_info = {}
-    # if config_file is not None:
-    #     data_info = read_yaml(config_file)
-    # param_ranges = strtuple_to_list(param_ranges)
     start = time.time()
     param_ranges = param_ranges if param_ranges is None else [str_to_list(x) for x in param_ranges] #TODO: better handle!
     sf = SystemFamily(data_name=data_name, num_lattice=num_lattice, min_dims=min_dims, max_dims=max_dims, labels=labels, param_ranges=param_ranges, device=device, seed=seed)
@@ -161,9 +152,11 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
 
 
 @cli.command(name='train', cls=command_with_config('config_file'), help='Train vector field topology classifier.')
-@click.argument("train-data-desc", type=click.Path())
-@click.argument("outdir", type=click.Path())
-@click.option('--vectors', is_flag=True, default=False)
+@click.option('--train-data-descs', '-t', type=str, multiple=True, default=['simple_oscillator_nsfcl'])
+@click.option('--outdir', '-o', type=click.Path(), default='output/')
+@click.option('--data-dir', '-dd', type=click.Path())
+@click.option('--datatype', '-dt', type=click.Choice(['angle', 'vector', 'param']), default='angle')
+@click.option('--model-type', '-mt', type=str, default='AttentionwFC')
 @click.option('--no-attention', is_flag=True, default=False)
 @click.option('--repeats', type=int, default=50)
 @click.option('--dont-save', is_flag=True, default=False)
@@ -178,18 +171,24 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
 @click.option('--num-epochs', type=int, default=20)
 @click.option('--desc', type=str, default='')
 @click.option('--device', type=str, default='cuda')
-@click.option('--test-data-descs', type=list, default=['simple_oscillator_noaug',
+@click.option('--test-data-descs', type=str, multiple=True, default=[
+                                                        'simple_oscillator_noaug',
                                                         'simple_oscillator_nsfcl',
+                                                        'lienard_poly',
+                                                        'lienard_sigmoid',
+                                                        'vanderpol',
                                                         'suphopf',
                                                         'bzreaction',
                                                         'selkov',
-                                                        'lienard_poly',
-                                                        'lienard_sigmoid',
-                                                        'pancreas_clusters_random_bin'])
+                                                        'pancreas_clusters_random_bin',
+                                                        'repressilator',
+                                                        ])
+@click.option('--test-noise', is_flag=True, default=False)
 @click.option('--seed', type=int, default=0)
+@click.option('--pretrained-path', type=str)
 @click.option('--config-file', type=click.Path())
-def call_train(train_data_desc, outdir, vectors, no_attention, test_data_descs, repeats, dont_save, verbose, dropout_rate, kernel_size, latent_dim, batch_size, 
-               conv_dim, datasize, lr, num_epochs, desc, seed, device, config_file):
+def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_attention, test_data_descs, test_noise, repeats, dont_save, verbose, dropout_rate, 
+               kernel_size, latent_dim, batch_size, conv_dim, datasize, lr, num_epochs, desc, seed, device, pretrained_path, config_file):
     """
     Train vector field topology classifier.
     """
@@ -200,63 +199,111 @@ def call_train(train_data_desc, outdir, vectors, no_attention, test_data_descs, 
 
     if not os.path.isdir(outdir):
         raise ValueError(f'Outdir {outdir} does not exist')
-    data_dir = os.path.join(outdir, 'data')
+    data_dir = os.path.join(outdir, 'data') if data_dir is None else data_dir
     if not os.path.isdir(data_dir):
         raise ValueError(f'Data dir {data_dir} does not exist')
     
     device = ensure_device(device)
     
-    to_angle = not vectors
     with_attention = not no_attention
     save = not dont_save
 
-    to_angle_str = 'angle' if to_angle else 'vector'
     with_attention_str = 'atten' if with_attention else 'noatten'
     
-    exp_name = f'{train_data_desc}_{to_angle_str}_{with_attention_str}' if desc == '' else desc
+    train_data_desc = '_'.join(train_data_descs)
+    if model_type == 'AttentionwFC':
+        exp_name = f'{train_data_desc}_{datatype}_{with_attention_str}_{model_type}' if desc == '' else desc
+    else:
+        exp_name = f'{train_data_desc}_{datatype}_{model_type}' if desc == '' else desc
+
 
     print(exp_name)
 
-
-    # test datasets
     
     results_dir = os.path.join(outdir, 'results')
-    
     ensure_dir(results_dir)
     
-    tt = 'test'
+    train_info = {'train_data_desc': train_data_desc,
+                    'datatype': datatype,
+                    'model_type': model_type,
+                    'with_attention': with_attention,
+                    'repeats': repeats,
+                    'dropout_rate': dropout_rate,
+                    'kernel_size': kernel_size,
+                    'latent_dim': latent_dim,
+                    'batch_size': batch_size,
+                    'conv_dim': conv_dim,
+                    'datasize': datasize,
+                    'lr': lr,
+                    'num_epochs': num_epochs,
+                    'desc': desc,
+                    'device': device,
+                    'pretrained_path': pretrained_path,
+                    'seed': seed}
+    
 
+    # test datasets
+    tt = 'test'
     test_datasets = {}
     for test_data_desc in test_data_descs:
+        print(test_data_desc)
         test_data_dir = os.path.join(data_dir, test_data_desc)
         if os.path.isdir(test_data_dir):
-            test_dataset = VecTopoDataset(test_data_dir, tt=tt, to_angle=to_angle) 
+            try:
+                test_dataset = VecTopoDataset(test_data_dir, tt=tt, datatype=datatype)
+            except:
+                print(f'Could not load {test_data_dir}')
+                continue
             test_datasets[test_data_desc] = test_dataset
         else:
             print(f'{test_data_dir} does not exist')
         
+    # optional: adding noise/mask testing
+    if test_noise:
+        noises = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+        mask_probs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3,0.35, 0.4, 0.45, 0.5]
+        test_data_desc_base = train_data_desc
+        test_data_dir = os.path.join(data_dir, test_data_desc_base)
+        
+        for noise in noises:
+            test_data_desc = test_data_desc_base + '_noise%.2f' % noise
+            test_dataset = VecTopoDataset(test_data_dir,  tt=tt, datatype=datatype, noise=noise) 
+            test_datasets[test_data_desc] = test_dataset
+        
+        for mask_prob in mask_probs:
+            test_data_desc = test_data_desc_base + '_masked%.2f' % mask_prob
+            test_dataset = VecTopoDataset(test_data_dir,  tt=tt, datatype=datatype, mask_prob=mask_prob) 
+            test_datasets[test_data_desc] = test_dataset
+
 
     for i in range(repeats):
         print(f'Run {i}')
         exp_desc = exp_name + '_' + str(i)
 
-        # train
-        train_data_dir = os.path.join(data_dir, train_data_desc)
-        train_dataset = VecTopoDataset(train_data_dir, to_angle=to_angle, datasize=datasize, filter_outbound=True)
-            
-        model, _ = train_model(train_dataset, to_angle=to_angle, with_attention=with_attention, lr=lr, kernel_size=kernel_size, num_epochs=num_epochs,
-                      dropout_rate=dropout_rate, batch_size=batch_size, conv_dim=conv_dim, device=device, verbose=verbose, latent_dim=latent_dim)
+        # read train data
+        for itrain_data_desc, train_data_desc in enumerate(train_data_descs):
+            train_data_dir = os.path.join(data_dir, train_data_desc)
+            if itrain_data_desc == 0:
+                train_dataset = VecTopoDataset(train_data_dir, datatype=datatype, datasize=datasize, filter_outbound=True)
+                train_dataset.plot_data()
+            else:
+                train_dataset += VecTopoDataset(train_data_dir, datatype=datatype, datasize=datasize, filter_outbound=True)
+
+        model, _ = train_model_alt(train_dataset, model_type=model_type, with_attention=with_attention, lr=lr, kernel_size=kernel_size, num_epochs=num_epochs,
+                      dropout_rate=dropout_rate, batch_size=batch_size, conv_dim=conv_dim, device=device, verbose=verbose, latent_dim=latent_dim, pretrained_path=pretrained_path)
         
+
         # evaluate on test data
-        exp_results_dir = os.path.join(results_dir, exp_desc)
-        ensure_dir(exp_results_dir)
-
-
         res = []
         save_dir = None
         for test_data_desc, test_dataset in test_datasets.items():
-            
+            exp_results_dir = os.path.join(results_dir, exp_desc)
+    
             if save:
+                ensure_dir(exp_results_dir)
+                train_config = os.path.join(exp_results_dir, 'train_config.yaml')
+                write_yaml(train_config, train_info)
+            
                 save_dir = os.path.join(exp_results_dir, test_data_desc)
                 ensure_dir(save_dir)
 
@@ -266,4 +313,5 @@ def call_train(train_data_desc, outdir, vectors, no_attention, test_data_descs, 
                         'loss': test_loss})
 
         print(pd.DataFrame(res))
-    
+
+    print('Successfully trained {}. Config file: {}'.format(exp_desc, exp_results_dir))

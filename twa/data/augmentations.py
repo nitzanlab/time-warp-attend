@@ -33,7 +33,7 @@ def augment_normalizing_flow(DE, augment_type='NSF_CL', nlayers=1, add_actnorm=F
         raise NotImplementedError(f'augment_type={augment_type} not implemented')
     
     vectors_new = vectors_new.detach().numpy().reshape(coords.shape)
-    # TEMP: print where (0,0) has been mapped to
+    
     if fixed_pts_org is not None:
         fixed_pts = model.forward(fixed_pts_org)[0][-1]
         fixed_pts = fixed_pts.detach().numpy()

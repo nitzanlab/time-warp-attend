@@ -53,6 +53,55 @@ class CNN(nn.Module):
         return self.conv_layers(x)
 
 
+class dCNN(nn.Module):
+    def __init__(self, in_shape, num_conv_layers=1,                                                                                                                                                         
+            kernel_sizes=[], kernel_features=[],                                                                                                                                                            
+            pooling_sizes = [],                                                                                                                                                                             
+            strides = [1],                                                                                                                                                                                  
+            batch_norm=False, dropout=False, dropout_rate=.5,                                                                                                                                               
+            activation_type='relu', last_pad=False):                                                                                                                                                        
+                                                                                                                                                                                                            
+        super(dCNN, self).__init__()                                                                                                                                                                        
+                                                                                                                                                                                                            
+        self.last_pad = last_pad                                                                                                                                                                            
+                                                                                                                                                                                                            
+        if activation_type == 'relu':                                                                                                                                                                       
+            activation = torch.nn.ReLU()
+        elif activation_type == 'leakyrelu':
+            activation = torch.nn.LeakyReLU()
+        elif activation_type == 'softplus':
+            activation = torch.nn.Softplus()
+        elif activation_type == 'tanh':
+            activation = torch.nn.Tanh()
+        elif activation_type == None:
+            activation = None
+        else:
+            raise ValueError('Activation type not recognized!')
+
+        deconv_layers = []
+        for l in range(num_conv_layers):
+            in_channels = in_shape[0] if l==0 else kernel_features[l-1]
+            output_padding = 1 if l == (num_conv_layers - 1) and last_pad else 0
+            deconv_layers.append(torch.nn.ConvTranspose2d(in_channels, kernel_features[l], kernel_sizes[l], stride=strides[l],output_padding=output_padding))
+            if batch_norm:
+                deconv_layers.append(torch.nn.BatchNorm2d(kernel_features[l]))
+            if activation != None:
+               deconv_layers.append(activation)
+            if len(pooling_sizes) >= l +1:
+                deconv_layers.append(torch.nn.MaxPool2d(pooling_sizes[l]))
+
+        self.num_conv_layers = num_conv_layers
+        self.deconv_layers = torch.nn.Sequential(*deconv_layers)
+
+        with torch.no_grad():
+            x = torch.rand(1, *in_shape)
+            y = self.deconv_layers(x)
+            self.out_shape = y.shape[1:]
+            self.out_size = torch.prod(torch.tensor(y.shape))
+
+    def forward(self, x):
+        return self.deconv_layers(x)
+
 
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim, num_hid_layers=1, hid_dims=[64], batch_norm=False, normalize=None, dropout=False, dropout_rate=.5, activation_type='relu'):

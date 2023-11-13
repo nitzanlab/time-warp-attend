@@ -11,9 +11,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 
-"""
-Copied from pytorch-normalizing-flows repository by karpathy, https://github.com/karpathy/pytorch-normalizing-flows/blob/master/nflib/nets.py
-"""
+
 class MLP(nn.Module):
     """ a simple 4-layer MLP """
 
@@ -225,9 +223,7 @@ class NSF_CL(nn.Module):
         log_det += torch.sum(ld, dim = 1)
         return torch.cat([lower, upper], dim = 1), log_det
     
-"""
-Copied from pytorch-normalizing-flows repository by karpathy, https://github.com/karpathy/pytorch-normalizing-flows/blob/master/nflib/flows.py
-"""
+
 
 class NormalizingFlow(nn.Module):
     """ A sequence of Normalizing Flows is a Normalizing Flow """

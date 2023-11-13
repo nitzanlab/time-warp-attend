@@ -12,8 +12,11 @@ from twa.utils import ensure_dir, write_yaml
 from twa.data import topo_point_vs_cycle, pt_attr_idx
 from sklearn import metrics
 import torch.optim as optim
+from phase2vec.utils._utils import get_command_defaults
+from phase2vec.cli import generate_net_config
 
-def train_model(train_dataset, to_angle=True, num_epochs=20, device='cuda', verbose=False, lr=1e-4, 
+
+def train_model(train_dataset, model_type=None, num_epochs=20, device='cuda', verbose=False, lr=1e-4, 
           batch_size=64, num_lattice=64, report_interval=2, num_classes=2, **kwargs_model):
     """
     Train a AttentionwFC_classify on the given dataset.
@@ -24,19 +27,17 @@ def train_model(train_dataset, to_angle=True, num_epochs=20, device='cuda', verb
         print('Loading...')
     train_data = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-
-    # train
-    in_channels = 1 if to_angle else 2
-    in_shape = (in_channels, num_lattice, num_lattice)
-    model = AttentionwFC_classify(in_shape, num_classes, **kwargs_model).to(device)
-
+    data,label = next(iter(train_data))
+    in_shape = list(data.shape[1:])
+    model = load_model(model_type, in_shape=in_shape, out_shape=num_classes, **kwargs_model).to(device)
 
     if verbose:
         print('Training...')
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     loss_fn = nn.BCEWithLogitsLoss() if num_classes > 1 else nn.MSELoss()
-    
+    loss_fn = nn.MSELoss() if model_type == 'AE' else loss_fn
+
     losses = []
     w = 1
     for epoch in range(num_epochs):
@@ -45,8 +46,10 @@ def train_model(train_dataset, to_angle=True, num_epochs=20, device='cuda', verb
             X, label = X.to(device), label.to(device)
             optimizer.zero_grad()
             output = model(X)
-            
-            loss = loss_fn(output, label.float())
+            if model_type == 'AE':
+                loss = loss_fn(output, X)
+            else:
+                loss = loss_fn(output, label.float())
             loss.backward()
             optimizer.step()
             
@@ -57,8 +60,49 @@ def train_model(train_dataset, to_angle=True, num_epochs=20, device='cuda', verb
                 losses.append(loss.item())
 
     return model, losses
-            
 
+
+def train_model_alt(train_dataset, model_type=None, pretrained_path=None, num_classes=2, **kwargs_train):
+    
+    kwargs_train = {} if kwargs_train is None else kwargs_train
+
+    if model_type == 'vf_AEFC':
+        print('Training vector field AE...')
+
+        train_data_dir2 = '../phase2vec/output/data/polynomial/'
+        datatype = 'vector'
+        datasize = 10000
+        train_dataset2 = VecTopoDataset(train_data_dir2, datatype=datatype, datasize=datasize)
+        model_ae, _ = train_model(train_dataset=train_dataset2, verbose=False, model_type='AE')
+
+        # model_ae, losses_ae = train_model(train_dataset=train_dataset, verbose=False, model_type='AE')
+        model_cl = load_model(model_type='FC', in_shape=model_ae.latent_dim, out_shape=num_classes)
+        kwargs_train['model_ae'] = model_ae
+        kwargs_train['model_cl'] = model_cl
+        model_type = 'AEFC'
+        
+    elif model_type == 'p2v_AEFC':
+        print('Loading phase2vec pretrained model...')
+        net_info = get_command_defaults(generate_net_config)
+        model_type = net_info['net_class']
+
+        # These parameters are not considered architectural parameters for the net, so we delete them before they're passed to the net builder. 
+        del net_info['net_class']
+        del net_info['output_file']
+        del net_info['pretrained_path']
+        del net_info['ae']
+
+        model_p2v = load_model(model_type='p2v', pretrained_path=pretrained_path, **net_info)
+        model_cl = load_model(model_type='FC', in_shape=model_p2v.latent_dim, out_shape=num_classes)
+        kwargs_train['model_ae'] = model_p2v
+        kwargs_train['model_cl'] = model_cl
+        pretrained_path = None
+        model_type = 'AEFC'
+        
+    print('Training classifier...')
+    model, losses = train_model(train_dataset=train_dataset, model_type=model_type, pretrained_path=pretrained_path, **kwargs_train)
+
+    return model, losses
 
 
 def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None, tt='test', device='cuda', repeats=10, is_prob=True, batch_size=64):
@@ -75,7 +119,7 @@ def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None,
     num_samples = len(test_dataset)
     
     preds = []
-    latents = []
+    # latents = []
     outputs = []
 
     if verbose:
@@ -98,12 +142,12 @@ def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None,
             pred = output > thr  # get the index of the max log-probability
             correct += pred.eq(label.view_as(pred)).all(axis=1).sum().item()
             
-            latent = model.encode(data)
+            # latent = model.encode(data)
             
             # if save:
             outputs.append(torch.Tensor.cpu(output).detach().numpy())
             preds.append(torch.Tensor.cpu(pred).detach().numpy())
-            latents.append(torch.Tensor.cpu(latent).detach().numpy())
+            # latents.append(torch.Tensor.cpu(latent).detach().numpy())
             
     end = time.time()
     if verbose:
@@ -118,19 +162,22 @@ def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None,
         
     res = {f'{tt}_loss': test_loss, f'{tt}_accuracy': correct}
     preds = np.concatenate(preds)
-    latents = np.concatenate(latents)
+    # latents = np.concatenate(latents)
     outputs = np.concatenate(outputs)
     
     y_pt = test_dataset.label[:,0]
     pred_pt = outputs[:,0]
-    print(y_pt.shape, pred_pt.shape)
-    fpr, tpr, thresholds = metrics.roc_curve(y_pt, pred_pt)
-    auc = metrics.auc(fpr, tpr)
-
+    # print(y_pt.shape, pred_pt.shape)
+    auc = None
+    try:
+        fpr, tpr, thresholds = metrics.roc_curve(y_pt, pred_pt)
+        auc = metrics.auc(fpr, tpr)
+    except:
+        pass
 
     if save and save_dir is not None:
         np.save(os.path.join(save_dir, f'yhat_{tt}.npy'), preds)
-        np.save(os.path.join(save_dir, f'embeddings_{tt}.npy'), latents)
+        # np.save(os.path.join(save_dir, f'embeddings_{tt}.npy'), latents)
         np.save(os.path.join(save_dir, f'outputs_{tt}.npy'), outputs)
         write_yaml(os.path.join(save_dir, f'training_results.yaml'), res)
         print('Saved predictions to: {}'.format(save_dir))

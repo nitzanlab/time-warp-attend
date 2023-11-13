@@ -11,16 +11,25 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from twa.data.polynomials import sindy_library, library_size
 from time import time
 from sklearn import linear_model
-from twa.data.utils import curl
 from twa.utils.utils import ensure_device
 from scipy.stats import binned_statistic_dd
 from scipy.interpolate import interpn
 from scipy.spatial.distance import cdist, pdist, squareform
-from twa.data.topology import topo_dont_know
-# from licplot import lic_internal
+from twa.data.topology import topo_dont_know, get_topology_Jacobian, topo_rep_spiral, topo_period_attr
 from matplotlib import colorbar
 from matplotlib.colors import Normalize
 
+
+def get_value(input_val, class_val, default_val):
+    """
+    Returns most specific value that is not None
+    """
+    val = input_val
+    if val is None:
+        val = class_val
+        if val is None:
+            val = default_val
+    return val
 
 class FlowSystemODE(torch.nn.Module):
     """
@@ -40,8 +49,21 @@ class FlowSystemODE(torch.nn.Module):
     eq_string = None
     plot_param_idx = [0,1]
 
+    labels = ['x', 'y']
+
+    min_dims = [-1, -1]
+    max_dims = [1, 1]
+
+    foldx = 1
+    foldy = 1
+
+    shiftx = 0
+    shifty = 0
+
     def __init__(self, params=None, labels=None, adjoint=False, solver_method='euler', train=False, device='cuda',
-                 num_lattice=64, min_dims=None, max_dims=None, boundary_type=None, boundary_radius=1e1, boundary_gain=1.0, time_direction=1, **kwargs):
+                 num_lattice=64, min_dims=None, max_dims=None, boundary_type=None, boundary_radius=1e1, boundary_gain=1.0,
+                 foldx=None, foldy=None, shiftx=None, shifty=None, 
+                 time_direction=1, **kwargs):
         """
         Initialize ODE. Defaults to a 2-dimensional system with a single parameter
 
@@ -65,11 +87,17 @@ class FlowSystemODE(torch.nn.Module):
         self.params = torch.nn.Parameter(params, requires_grad=True) if train else params
         self.params = torch.tensor(self.params) if not isinstance(self.params, torch.Tensor) else self.params
         self.params = self.params.float()
-        self.labels = labels if labels is not None else ['x', 'y']
+        self.labels = self.__class__.labels if labels is None else labels
         self.dim = len(self.labels)
         self.num_lattice = num_lattice
-        self.min_dims = min_dims if min_dims is not None else [-1, ] * self.dim
-        self.max_dims = max_dims if max_dims is not None else [1, ] * self.dim
+        self.min_dims = self.__class__.min_dims if min_dims is None else min_dims
+        self.max_dims = self.__class__.max_dims if max_dims is None else max_dims
+        
+        # self.min_dims = get_value(min_dims, self.__class__.min_dims,  [-1, ] * self.dim)
+        # self.max_dims = get_value(max_dims, self.__class__.max_dims,  [1, ] * self.dim)
+        
+        # self.min_dims = min_dims if min_dims is not None else [-1, ] * self.dim
+        # self.max_dims = max_dims if max_dims is not None else [1, ] * self.dim
         self.boundary_type = boundary_type
         self.boundary_radius = torch.tensor(boundary_radius).float()
         self.boundary_gain = torch.tensor(boundary_gain).float()
@@ -78,15 +106,19 @@ class FlowSystemODE(torch.nn.Module):
         self.poly_order = 3 
         self.polynomial_terms = sindy_library(torch.ones((1, self.dim)), poly_order=self.poly_order, include_sine=False, include_exp=False)[1]
         self.coords_ij = None
-        self.coords_xy = self.generate_mesh(min_dims=self.min_dims, max_dims=self.max_dims, num_lattice=self.num_lattice, indexing='xy')
-        self.coords_ij = self.generate_mesh(min_dims=self.min_dims, max_dims=self.max_dims, num_lattice=self.num_lattice, indexing='ij')
-        self.foldx = 1
-        self.foldy = 1
-        self.shiftx = 0
-        self.shifty = 0
+        self.coords_xy = None
+        if self.dim == 2:
+            self.coords_xy = self.generate_mesh(min_dims=self.min_dims, max_dims=self.max_dims, num_lattice=self.num_lattice, indexing='xy')
+            self.coords_ij = self.generate_mesh(min_dims=self.min_dims, max_dims=self.max_dims, num_lattice=self.num_lattice, indexing='ij')
+        self.foldx = self.__class__.foldx if foldx is None else foldx
+        self.foldy = self.__class__.foldy if foldy is None else foldy
+        self.shiftx = self.__class__.shiftx if shiftx is None else shiftx
+        self.shifty = self.__class__.shifty if shifty is None else shifty
         assert len(self.min_dims) == self.dim, 'min_dims must be of length dim'
         assert len(self.max_dims) == self.dim, 'max_dims must be of length dim'
         assert len(self.labels) == self.dim, 'labels must be of length dim'
+
+    
 
 
     def run(self, T, alpha, init=None, clip=True, time_direction=None):
@@ -105,7 +137,7 @@ class FlowSystemODE(torch.nn.Module):
         grid = torch.linspace(0, T, abs(int(T / alpha)), device=self.device)
         trajectory = self.solver(self, init, grid, rtol=1e-3, atol=1e-5, method=self.solver_method)
         if clip:
-            trajectory = torch.cat([torch.clamp(trajectory[:,:,i].unsqueeze(-1), min=self.min_dims[i], max=self.max_dims[i]) for i in range(self.dim)], dim=2)
+            trajectory = torch.cat([torch.clamp(trajectory[...,i].unsqueeze(-1), min=self.min_dims[i], max=self.max_dims[i]) for i in range(self.dim)], dim=-1)
         return trajectory
 
 
@@ -490,14 +522,15 @@ class FlowSystemODE(torch.nn.Module):
 
     ############################################################ Invariances ############################################################
     @staticmethod
-    def get_bifurcation_curve(self):
-        pass
+    def get_bifurcation_curve():
+        print('Not implemented yet')
+        return []
 
     def get_fixed_pts_org(self):
         """
         Returns the fixed points defined by the original system
         """
-        print('Not implemented yet')
+        print('Fixed pts original not implemented yet')
         return None
 
     def get_fixed_pts(self):
@@ -513,6 +546,44 @@ class FlowSystemODE(torch.nn.Module):
             y_st = y_st / self.foldy + self.shifty
             pts.append([x_st, y_st])
         return pts
+    
+    def J(self, x, y):
+        """
+        Returns the Jacobian of the system at (x,y)
+        """
+        print('Not implemented yet')
+        return None
+    
+    def curl(self, x, y):
+        """
+        Returns the curl of the system at (x,y)
+        """
+        if self.dim != 2:
+            raise NotImplementedError('Curl is only implemented for 2D systems.')
+        
+        A = self.J(x, y)
+        if A is None:
+            return None
+        
+        return A[1,0]-A[0,1]
+
+    def get_topology_supercriticalhopf(self):
+        """
+        Given that the system undergoes a supercritical Hopf bifurcation and implementation of fixed points,
+        return either cycle & unstable fixed point or stable fixed point
+        """
+        # fixed pt
+        fixed_pts = self.get_fixed_pts()
+        if fixed_pts is None:
+            return None
+        x_st, y_st = fixed_pts[0]
+        J_st = self.J(x_st, y_st)
+    
+        topo = get_topology_Jacobian(J_st)
+        topos = [topo]
+        if topo == topo_rep_spiral:
+            topos.append(topo_period_attr)
+        return topos
     
     def get_topology(self):
         """

@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 def get_optimizer(optimizer_name, model_params, lr, momentum=0.0):
     """
@@ -154,7 +155,10 @@ def grad_status(to_train):
         return torch.no_grad()
 
 
-def laplacian(A):
-    '''Calculate laplacian of array'''
-    A = F.pad(A,(0,0,1,1,1,1))
-    return A[:-2,1:-1] + A[1:-1,:-2] - 4*A[1:-1,1:-1] + A[1:-1,2:] + A[2:,1:-1]
+# def laplacian(A):
+#     '''Calculate laplacian of array'''
+#     A = F.pad(A,(0,0,1,1,1,1))
+#     return A[:-2,1:-1] + A[1:-1,:-2] - 4*A[1:-1,1:-1] + A[1:-1,2:] + A[2:,1:-1]
+
+
+

@@ -48,6 +48,9 @@ class SystemFamily():
         elif data_name == 'suphopf':
             generator = SupercriticalHopf
 
+        elif data_name == 'subhopf':
+            generator = SubcriticalHopf
+
         elif data_name == 'prey_preditor' or data_name == 'pp':
             generator = PreyPredator
 
@@ -339,7 +342,7 @@ class SystemFamily():
 ######################################## Data generation ########################################################
 
     def generate_flows(self, num_samples, noise_type=None, noise_level=None, sampler_type='random', params=None, 
-                      interpolate_missing=False, add_sand=False, augment_type=None, augment_ntries=10, max_topos=3, **kwargs_aug):
+                      interpolate_missing=False, add_sand=False, add_traj=False, augment_type=None, augment_ntries=10, max_topos=3, T=100, alpha=0.1, **kwargs_aug):
         """
         Generate original and perturbed params and flows
         """
@@ -357,6 +360,9 @@ class SystemFamily():
 
         sand = []
         sand_pert = []
+
+        trajs = []
+        trajs_pert = []
 
         fixed_pts = []
         fixed_pts_pert = []
@@ -407,6 +413,13 @@ class SystemFamily():
                 sand.append(image)
                 sand_pert.append(image_pert)
 
+            if add_traj:
+                init = [np.random.random() * (DE.max_dims[i] - DE.min_dims[i]) + DE.min_dims[i] for i in range(DE.dim)]
+                traj = DE.run(T=T, alpha=alpha, init=torch.Tensor(init))
+                init = [np.random.random() * (DE_pert.max_dims[i] - DE_pert.min_dims[i]) + DE_pert.min_dims[i] for i in range(DE_pert.dim)]
+                traj_pert = traj if no_pert else DE_pert.run(T=T, alpha=alpha, init=torch.Tensor(init))
+                trajs.append(traj)
+                trajs_pert.append(traj_pert)
             
             tps = DE.get_topology()
             if len(tps) < max_topos:
@@ -447,6 +460,9 @@ class SystemFamily():
         sand = np.stack(sand) if len(sand) else None
         sand_pert  = np.stack(sand_pert) if len(sand_pert) else None
 
+        trajs = np.stack(trajs) if len(trajs) else None
+        trajs_pert  = np.stack(trajs_pert) if len(trajs_pert) else None
+
         vectors_pert = self.noise_vectors(vectors_pert, noise_type, noise_level=noise_level)
 
         topos = np.stack(topos)
@@ -462,7 +478,8 @@ class SystemFamily():
                'vectors_pert': vectors_pert, 
                'DEs_pert': DEs_pert, 
                'poly_params_pert': poly_params_pert, 
-               'sand_pert': sand_pert, 
+               'sand_pert': sand_pert,
+               'trajs_pert': trajs_pert, 
                'fixed_pts_pert': fixed_pts_pert, 
                'dists_pert': dists_pert, 
                'topos_pert': topos_pert, 
@@ -470,6 +487,7 @@ class SystemFamily():
                'vectors': vectors, 
                'DEs': DEs, 
                'poly_params': poly_params, 
+               'trajs': trajs,
                'sand': sand, 
                'fixed_pts': fixed_pts, 
                'dists': dists,

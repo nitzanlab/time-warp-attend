@@ -120,7 +120,14 @@ class VecTopoDataset(Dataset):
             if datatype == 'angle':
                 self.data = self.data.clamp_(-np.pi, np.pi)
         if mask_prob > 0:
-            self.data[torch.rand_like(self.data) < mask_prob] = 0
+            # self.data[torch.rand_like(self.data) < mask_prob] = 0
+            idx_mask = torch.rand(self.datasize, self.num_lattice, self.num_lattice) < mask_prob
+            if datatype == 'angle':
+                idx_mask = torch.unsqueeze(idx_mask, dim=1)
+            elif datatype == 'vector':
+                idx_mask = torch.stack((idx_mask, idx_mask), dim=1)
+            self.data[idx_mask] = 0
+
 
             
     def __len__(self):

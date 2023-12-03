@@ -18,7 +18,8 @@ from scipy.spatial.distance import cdist, pdist, squareform
 from twa.data.topology import topo_dont_know, get_topology_Jacobian, topo_rep_spiral, topo_period_attr
 from matplotlib import colorbar
 from matplotlib.colors import Normalize
-
+import scipy.interpolate as interp
+import scipy.integrate as integrate
 
 def get_value(input_val, class_val, default_val):
     """
@@ -170,7 +171,8 @@ class FlowSystemODE(torch.nn.Module):
         Returns a vector field of the system
         """
         if coords is None:
-            coords = self.generate_mesh(min_dims=min_dims, max_dims=max_dims, num_lattice=num_lattice, indexing='xy').to(self.device)
+            # coords = self.generate_mesh(min_dims=min_dims, max_dims=max_dims, num_lattice=num_lattice, indexing='xy').to(self.device)
+            coords = self.coords_xy.to(self.device)
         dim = coords.shape[-1]
         if vectors is None:
             vector_dims = [self.num_lattice] * dim + [dim]
@@ -254,6 +256,46 @@ class FlowSystemODE(torch.nn.Module):
         
         return sand_image
 
+    @staticmethod
+    def integrate_vector_field(coords, vectors, T, alpha, init, plot=False, tit='', ax=None):
+        """
+
+        """
+        #dummy input from the streamplot demo
+        # y, x = np.mgrid[-3:3:100j, -3:3:100j]
+        # vx = -1 - x**2 + y
+        # vy = 1 + x - y**2
+        x = coords[..., 0]
+        y = coords[..., 1]
+        vx = vectors[..., 0]
+        vy = vectors[..., 1]
+
+        #dfun = lambda x,y: [interp.griddata((x,y),vx,np.array([[x,y]])), interp.griddata((x,y),vy,np.array([[x,y]]))]
+        dfunx = interp.interp2d(x[:],y[:],vx[:])
+        dfuny = interp.interp2d(x[:],y[:],vy[:])
+        dfun = lambda xy,t: [dfunx(xy[0], xy[1])[0], dfuny(xy[0], xy[1])[0]]
+        # xyarr = np.array(zip(x.flatten(),y.flatten()))
+        # dfun = lambda p,t: [interp.griddata(xyarr,vx.flatten(),np.array([p]))[0], interp.griddata(xyarr,vy.flatten(),np.array([p]))[0]]
+
+        t = np.arange(0,T,alpha)
+
+        streamline=integrate.odeint(dfun,init,t)
+
+        #plot it
+        if plot:
+            if ax is None:
+                fig, ax = plt.subplots()
+
+            ax.quiver(x,y,vx,vy)
+            ax.scatter(streamline[:,0], streamline[:,1], c='r', s=5)
+            # ax.axis('equal')
+            # mymask = (streamline[:,0].min()*0.9<=x) & (x<=streamline[:,0].max()*1.1) & (streamline[:,1].min()*0.9<=y) & (y<=streamline[:,1].max()*1.1)
+            # plt.quiver(x[mymask],y[mymask],vx[mymask],vy[mymask])
+            
+            ax.set_title(tit)
+            # plt.show()
+            
+        return streamline
     
     ############################################################ Plotting ############################################################
 

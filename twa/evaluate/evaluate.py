@@ -10,13 +10,15 @@ from twa.utils import ensure_dir, write_yaml, read_yaml, glob_re
 from twa.data import FlowSystemODE, topo_point_vs_cycle, pt_attr_idx, cyc_attr_idx, SystemFamily
 from sklearn.decomposition import PCA
 from .utils import find_optimal_cutoff
-from skdim.id import lPCA, DANCo
+# from skdim.id import lPCA, DANCo
 from sklearn.metrics import silhouette_score, roc_curve, auc
 from twa.utils import plot_diverge_scale, get_prediction
 import scanpy as sc
 import scvelo as scv
+from scipy.stats import spearmanr
 torch.manual_seed(0)
-
+from sklearn.metrics import mutual_info_score
+from sklearn.feature_selection import mutual_info_regression
 
 
 class Evaluator:
@@ -303,72 +305,72 @@ class Evaluator:
 
         Evaluator.print_mean_std(df_mean, df_std, **kwargs)
     
-    def get_silhouette(self, n_neighbors=100):
-        res = {}
-        comp_sil = True
-        comp_lpca = False
-        comp_danco = False
-        # compute embeddings dimensionality and alignment on test data
-        for exp, embeddings in self.exp_embeddings.items():
-            fit_sys = '_'.join(exp.split('_')[:3]) # TODO: make generic
-            train_embedding = embeddings[fit_sys]
-            ntrain = len(train_embedding)
-            exp_res = {}
-            for sys in self.syss:
-                exp_sys_res = {}
-                embedding = embeddings[sys]
-                if comp_lpca:
-                    lpca = lPCA().fit_pw(embedding,
-                                                n_neighbors=n_neighbors,
-                                                n_jobs=1)
-                    exp_sys_res['lpca'] = np.mean(lpca.dimension_pw_)
-                if comp_danco:
-                    danco = DANCo(k=10)
-                    exp_sys_res['danco'] = danco.fit(embedding).dimension_
-                nsamples = len(embedding)
-                X = np.concatenate((train_embedding, embedding))
-                y = np.concatenate((np.zeros(ntrain), np.ones(nsamples)))
-                if comp_sil:
-                    sil = silhouette_score(X,y)
-                    sil = np.nan if fit_sys == sys else sil
-                    exp_sys_res['sil'] = sil
+    # def get_silhouette(self, n_neighbors=100):
+    #     res = {}
+    #     comp_sil = True
+    #     comp_lpca = False
+    #     comp_danco = False
+    #     # compute embeddings dimensionality and alignment on test data
+    #     for exp, embeddings in self.exp_embeddings.items():
+    #         fit_sys = '_'.join(exp.split('_')[:3]) # TODO: make generic
+    #         train_embedding = embeddings[fit_sys]
+    #         ntrain = len(train_embedding)
+    #         exp_res = {}
+    #         for sys in self.syss:
+    #             exp_sys_res = {}
+    #             embedding = embeddings[sys]
+    #             if comp_lpca:
+    #                 lpca = lPCA().fit_pw(embedding,
+    #                                             n_neighbors=n_neighbors,
+    #                                             n_jobs=1)
+    #                 exp_sys_res['lpca'] = np.mean(lpca.dimension_pw_)
+    #             if comp_danco:
+    #                 danco = DANCo(k=10)
+    #                 exp_sys_res['danco'] = danco.fit(embedding).dimension_
+    #             nsamples = len(embedding)
+    #             X = np.concatenate((train_embedding, embedding))
+    #             y = np.concatenate((np.zeros(ntrain), np.ones(nsamples)))
+    #             if comp_sil:
+    #                 sil = silhouette_score(X,y)
+    #                 sil = np.nan if fit_sys == sys else sil
+    #                 exp_sys_res['sil'] = sil
                     
-                exp_res[sys] = exp_sys_res
-                # {'sil': sil, 'lpca': np.mean(lpca.dimension_pw_), }# 'danco': danco.fit(embedding).dimension_}
+    #             exp_res[sys] = exp_sys_res
+    #             # {'sil': sil, 'lpca': np.mean(lpca.dimension_pw_), }# 'danco': danco.fit(embedding).dimension_}
             
-            # # add of all systems together
-            # X = np.concatenate([embeddings[sys] for sys in selected_syss])
-            # y = np.concatenate([np.ones(len(embeddings[sys]))*i for i,sys in enumerate(selected_syss)])
-            # sil = silhouette_score(X,y)
-            # lpca = skdim.id.lPCA().fit_pw(X, n_neighbors=n_neighbors,
-            #                                 n_jobs=1)
-            # # danco = skdim.id.DANCo(k=10)
-            # exp_res['All'] = {'sil': sil, 'lpca': np.mean(lpca.dimension_pw_), }# 'danco': danco.fit(X).dimension_}
-            res[exp] = pd.DataFrame(exp_res)
+    #         # # add of all systems together
+    #         # X = np.concatenate([embeddings[sys] for sys in selected_syss])
+    #         # y = np.concatenate([np.ones(len(embeddings[sys]))*i for i,sys in enumerate(selected_syss)])
+    #         # sil = silhouette_score(X,y)
+    #         # lpca = skdim.id.lPCA().fit_pw(X, n_neighbors=n_neighbors,
+    #         #                                 n_jobs=1)
+    #         # # danco = skdim.id.DANCo(k=10)
+    #         # exp_res['All'] = {'sil': sil, 'lpca': np.mean(lpca.dimension_pw_), }# 'danco': danco.fit(X).dimension_}
+    #         res[exp] = pd.DataFrame(exp_res)
                 
-        res = pd.concat(res)
-        res.index.rename(['', ''], inplace=True)
-        res = res.droplevel(1)
+    #     res = pd.concat(res)
+    #     res.index.rename(['', ''], inplace=True)
+    #     res = res.droplevel(1)
 
-        res['exp rep'] = res.index
-        res['exp'] = res['exp rep'].apply(lambda x: '_'.join(x.split('_')[:-1]))
-        df = res.groupby('exp').mean()
-        df.index.name = ''
-        df.columns.name = ''
-        df = df.loc[self.exps].rename(index=self.exp_descs)
-        df = df[self.syss].rename(columns=self.sys_descs)
+    #     res['exp rep'] = res.index
+    #     res['exp'] = res['exp rep'].apply(lambda x: '_'.join(x.split('_')[:-1]))
+    #     df = res.groupby('exp').mean()
+    #     df.index.name = ''
+    #     df.columns.name = ''
+    #     df = df.loc[self.exps].rename(index=self.exp_descs)
+    #     df = df[self.syss].rename(columns=self.sys_descs)
 
         
-        # df_s = res.style.format("{:.2f}")
+    #     # df_s = res.style.format("{:.2f}")
 
-        # # loop through rows and find which column for each row has the highest value
-        # for col in res.columns:
-        #     row = res[col].idxmin()
-        #     # redo formatting for a specific cell
-        #     df_s = df_s.format(lambda x: "\\textbf{" + f'{x:.2f}' + "}", subset=(row, col))
-        # print(df_s.to_latex(hrules=True))
+    #     # # loop through rows and find which column for each row has the highest value
+    #     # for col in res.columns:
+    #     #     row = res[col].idxmin()
+    #     #     # redo formatting for a specific cell
+    #     #     df_s = df_s.format(lambda x: "\\textbf{" + f'{x:.2f}' + "}", subset=(row, col))
+    #     # print(df_s.to_latex(hrules=True))
 
-        return df
+    #     return df
 
     def sample_exp_from_repeats(self):
         """
@@ -379,78 +381,80 @@ class Evaluator:
             single_exp_descs[exp] = np.random.choice(self.exp_repeats[exp])
         return single_exp_descs
     
-    def plot_latent(self, single_exp_descs, selected_syss=['bzreaction', 'selkov']):
-        # fit pca space and plot all systems
+    # def plot_latent(self, single_exp_descs, selected_syss=['bzreaction', 'selkov']):
+    #     # fit pca space and plot all systems
 
-        pca = PCA(n_components=2)
-        nrows = 1
-        ncols = len(single_exp_descs.keys())
-        fig, ax = plt.subplots(nrows, ncols, figsize=(ncols * 5, nrows * 5), constrained_layout=True, tight_layout=False)
-        fig2, ax2 = plt.subplots(nrows, ncols, figsize=(ncols * 5, nrows * 5), constrained_layout=True, tight_layout=False)
-        ax = ax.flatten()
-        ax2 = ax2.flatten()
-        recompute_pca = False
-        exp_latent_pcas = {}
-        exp_nsamples_syss = {}
+    #     pca = PCA(n_components=2)
+    #     nrows = 1
+    #     ncols = len(single_exp_descs.keys())
+    #     fig, ax = plt.subplots(nrows, ncols, figsize=(ncols * 5, nrows * 5), constrained_layout=True, tight_layout=False)
+    #     fig2, ax2 = plt.subplots(nrows, ncols, figsize=(ncols * 5, nrows * 5), constrained_layout=True, tight_layout=False)
+    #     ax = ax.flatten()
+    #     ax2 = ax2.flatten()
+    #     recompute_pca = False
+    #     exp_latent_pcas = {}
+    #     exp_nsamples_syss = {}
 
-        for iexp, (exp, exp_rep) in enumerate(single_exp_descs.items()):
-            fit_sys = '_'.join(exp_rep.split('_')[:3])
-            embeddings = self.exp_embeddings[exp_rep]
-            embedding = embeddings[fit_sys]
+    #     for iexp, (exp, exp_rep) in enumerate(single_exp_descs.items()):
+    #         fit_sys = '_'.join(exp_rep.split('_')[:3])
+    #         embeddings = self.exp_embeddings[exp_rep]
+    #         embedding = embeddings[fit_sys]
 
-            fit_latent_pca = pca.fit_transform(embedding)
+    #         fit_latent_pca = pca.fit_transform(embedding)
 
-            latent_pcas = {}
-            nsamples_syss = {}
-            # plt.locator_params(nbins=4)
-            ax[iexp].scatter(fit_latent_pca[:,0], fit_latent_pca[:,1], color='black', s=50, alpha=0.5, label='Train dataset')
-            for isys, sys in enumerate(selected_syss):
-                embedding = embeddings[sys]
-                bifurp = self.bifurps[sys]
+    #         latent_pcas = {}
+    #         nsamples_syss = {}
+    #         # plt.locator_params(nbins=4)
+    #         ax[iexp].scatter(fit_latent_pca[:,0], fit_latent_pca[:,1], color='black', s=50, alpha=0.5, label='Train dataset')
+    #         for isys, sys in enumerate(selected_syss):
+    #             embedding = embeddings[sys]
+    #             bifurp = self.bifurps[sys]
 
-                # recompute pca
-                if recompute_pca:
-                    pca = PCA(n_components=2)
-                    latent_pca = pca.fit_transform(embedding)
-                else:
-                    latent_pca = pca.transform(embedding)
-                    latent_pcas[sys] = latent_pca
-                    nsamples_syss[sys] = len(latent_pca)
+    #             # recompute pca
+    #             if recompute_pca:
+    #                 pca = PCA(n_components=2)
+    #                 latent_pca = pca.fit_transform(embedding)
+    #             else:
+    #                 latent_pca = pca.transform(embedding)
+    #                 latent_pcas[sys] = latent_pca
+    #                 nsamples_syss[sys] = len(latent_pca)
                 
-                ax[iexp].scatter(latent_pca[:,0], latent_pca[:,1], s=50, alpha=0.5, label=self.sys_descs[sys])
+    #             ax[iexp].scatter(latent_pca[:,0], latent_pca[:,1], s=50, alpha=0.5, label=self.sys_descs[sys])
 
-            exp_latent_pcas[exp_rep] = latent_pcas
-            exp_nsamples_syss[exp_rep] = nsamples_syss
+    #         exp_latent_pcas[exp_rep] = latent_pcas
+    #         exp_nsamples_syss[exp_rep] = nsamples_syss
                     
-            tit = self.exp_descs[exp]
-            ax[iexp].set_xscale('symlog')
-            ax[iexp].set_yscale('symlog')
-            ax[iexp].set_title(tit, fontsize=25)
-            ax[iexp].axis('off')
+    #         tit = self.exp_descs[exp]
+    #         ax[iexp].set_xscale('symlog')
+    #         ax[iexp].set_yscale('symlog')
+    #         ax[iexp].set_title(tit, fontsize=25)
+    #         ax[iexp].axis('off')
 
-                # # tit = fr'{sys.title()} (corr: {corr:.2f})'
-            if not recompute_pca:
-                # ax[isys].scatter(fit_latent_pca[:,0], fit_latent_pca[:,1], color='slategray')
-                plot_diverge_scale(fit_latent_pca[:,0], fit_latent_pca[:,1], self.bifurps[fit_sys], xlabel='PC1', ylabel='PC2', colorlabel='Distance from bifurcation', title=tit, ax=ax2[iexp], add_colorbar=False, s=50)
+    #             # # tit = fr'{sys.title()} (corr: {corr:.2f})'
+    #         if not recompute_pca:
+    #             # ax[isys].scatter(fit_latent_pca[:,0], fit_latent_pca[:,1], color='slategray')
+    #             plot_diverge_scale(fit_latent_pca[:,0], fit_latent_pca[:,1], self.bifurps[fit_sys], xlabel='PC1', ylabel='PC2', colorlabel='Distance from bifurcation', title=tit, ax=ax2[iexp], add_colorbar=False, s=50)
             
-            ax2[iexp].set_xscale('symlog')
-            ax2[iexp].set_yscale('symlog')
-            ax2[iexp].set_title(tit, fontsize=25)
-            ax2[iexp].axis('off')
-                # # ax[iexp].locator_params(nbins=4)
-                # ax[iexp].xaxis.set_tick_params(labelsize=fontsize)
-                # ax[iexp].yaxis.set_tick_params(labelsize=fontsize)
-                # ax[iexp].xaxis.set_major_locator(plt.MaxNLocator(nticks))
-                # ax[iexp].yaxis.set_major_locator(plt.MaxNLocator(nticks))
+    #         ax2[iexp].set_xscale('symlog')
+    #         ax2[iexp].set_yscale('symlog')
+    #         ax2[iexp].set_title(tit, fontsize=25)
+    #         ax2[iexp].axis('off')
+    #             # # ax[iexp].locator_params(nbins=4)
+    #             # ax[iexp].xaxis.set_tick_params(labelsize=fontsize)
+    #             # ax[iexp].yaxis.set_tick_params(labelsize=fontsize)
+    #             # ax[iexp].xaxis.set_major_locator(plt.MaxNLocator(nticks))
+    #             # ax[iexp].yaxis.set_major_locator(plt.MaxNLocator(nticks))
             
 
-        ax[iexp].legend(fontsize=25, markerscale=2, frameon=False)
+    #     ax[iexp].legend(fontsize=25, markerscale=2, frameon=False)
 
 
     def plot_bifurcation(self, exp, syss=None, acc_thr=0.5, ref_sys='simple_oscillator_nsfcl', s=50, verbose=False, **kwargs_pred):
         """
         Plot confidence and inferred bifurcation diagrams.
         """
+        labelsize = 25
+        fontsize = 30
         syss = self.syss if syss is None else syss
         syss = [sys for sys in syss if self.ode_syss[sys] is not None]
         # here, set const thr
@@ -541,13 +545,24 @@ class Evaluator:
             bifurp = self.bifurps[sys]
             sysp = self.sysps[sys]
 
-            y_cyc = fit_value[sys][:,cyc_attr_idx]
+            y_cyc = fit_value[sys][:, cyc_attr_idx]
             tit = f'{self.sys_descs[sys]}'
 
             if bifurp is not None:
-                corr = np.corrcoef(bifurp, y_cyc)[0,1]
-                print(sys, corr)
-                tit = f'{self.sys_descs[sys]} ({corr:.2f})'
+                # corr = np.corrcoef(np.abs(bifurp), np.abs(y_cyc))[0,1]
+                # corr = spearmanr(bifurp, y_cyc).correlation
+                # corr = mutual_info_score(np.abs(bifurp), np.abs(y_cyc), discrete_features=[False])
+                # corr = spearmanr(np.abs(bifurp), np.abs(y_cyc)).correlation
+                # corr = mutual_info_regression(np.abs(bifurp).reshape(-1, 1), np.abs(y_cyc).reshape(-1, 1))[0]
+                corr_pt = spearmanr(np.abs(bifurp[bifurp < 0]), np.abs(y_cyc[bifurp < 0])).correlation
+                corr_cyc = spearmanr(np.abs(bifurp[bifurp > 0]), np.abs(y_cyc[bifurp > 0])).correlation
+                
+                corr_pt = spearmanr(np.abs(bifurp[bifurp < 0]), np.abs(y_cyc[bifurp < 0])).correlation
+                corr_cyc = spearmanr(np.abs(bifurp[bifurp > 0]), np.abs(y_cyc[bifurp > 0])).correlation
+                
+                print(sys, corr_pt, corr_cyc)
+                # tit = f'{self.sys_descs[sys]} ({corr_pt:.2f}, {corr_cyc:.2f})'
+                tit = f'{self.sys_descs[sys]}'
 
             param_descs = DE.param_descs
             
@@ -559,7 +574,7 @@ class Evaluator:
                 
             plot_diverge_scale(sysp[:,param_idx1], sysp[:,param_idx2], y_cyc, xlabel=xlabel, 
                                 ylabel=ylabel, colorlabel=colorlabel, title=tit, ax=ax[isys], 
-                                add_colorbar=False, labelsize=20, s=s, vmin=-1, vmax=1)
+                                add_colorbar=False, labelsize=labelsize, fontsize=fontsize, s=s, vmin=-1, vmax=1)
             
             x = sysp[:,param_idx1]
             y = sysp[:,param_idx2]
@@ -571,7 +586,7 @@ class Evaluator:
             tit = self.sys_descs[sys]
             plot_diverge_scale(xy_grid[:,0], xy_grid[:,1], z_grid, xlabel=xlabel, ylabel=ylabel, 
                                 colorlabel=colorlabel, title=tit, ax=ax2[isys], add_colorbar=True, 
-                                labelsize=20, s=50)
+                                labelsize=labelsize, fontsize=fontsize,  s=50)
             
             # highlight pts of minimum value
             idx = np.where(np.abs(z_grid) < thr)

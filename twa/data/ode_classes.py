@@ -241,6 +241,89 @@ class SupercriticalHopf(FlowSystemODE):
                              r'$\omega$': omega, 
                              r'$b$': b})]
 
+
+class SubcriticalHopf(FlowSystemODE):
+    """
+    Subcritical Hopf bifurcation:
+        rdot = mu * r + r^3 - r^5
+        thetadot = omega + b*r^2
+    where:
+    - mu controls stability of fixed point at the origin
+    - omega controls frequency of oscillations
+    - b controls dependence of frequency on amplitude
+
+    Strogatz, p.252
+    """
+
+    min_dims = [-1, -1]
+    max_dims = [1, 1]
+    # recommended_param_ranges=[[-1.,1.],[-0.25,0.25],[-0.5,0.5]]
+    # recommended_param_ranges=[[-1.,1.],[-1.,1.],[-1.,1.]]
+    recommended_param_ranges=[[-0.5,0.25],[-1.,1.],[-1.,1.]]
+    # recommended_param_ranges=[[-1.,1.],[-1.,1.],[-1.,1.]]
+    recommended_param_groups=[recommended_param_ranges]
+    
+    short_name='subhopf'
+    bifurp_desc = r'$\mu$'
+    param_descs = [r'$\mu$', r'$\omega$', r'$b$']
+    
+    # eq_string = r'$\dot{x}_0 = x_1; \dot{x}_1=%.02f x_1 + x_0 - x_0^2 + x_0x_1$'
+
+    def forward(self, t, z, **kwargs):
+        x = z[..., 0]
+        y = z[..., 1]
+
+        mu = self.params[0]
+        omega = self.params[1]
+        b = self.params[2]
+
+        r,theta = cartesian_to_polar(x, y)
+        
+        rdot = mu * r + r**3 - r**5
+        thetadot = omega + b*r**2
+        
+        xdot, ydot = polar_derivative_to_cartesian_derivative(r, theta, rdot, thetadot)
+        
+        zdot = torch.cat([xdot.unsqueeze(-1), ydot.unsqueeze(-1)], dim=-1)
+        zdot = torch.cat([xdot.unsqueeze(-1), ydot.unsqueeze(-1)], dim=-1)
+        return zdot
+
+    def get_fixed_pts_org(self):
+        return [(0.,0.)]
+    
+    def get_topology(self):
+        
+        mu = self.params[0].numpy()
+        if mu < -1/4:
+            topos = [topo_attr_spiral]
+        elif mu > -1/4 and mu < 0:
+            topos = [topo_attr_spiral, topo_period_rep, topo_period_attr]
+        elif mu > 0:
+            topos = [topo_rep_spiral, topo_period_attr]
+        else:
+            topos = [topo_degenerate]
+            
+        return topos
+    
+    def get_dist_from_bifur(self):
+        mu = self.params[0].numpy()
+        return np.minimum(np.linalg.norm(mu), np.linalg.norm(mu + 1/4))
+
+
+    @staticmethod
+    def get_bifurcation_curve(n_points=100):
+        mu1 = np.full(n_points, 0)
+        mu2 = np.full(n_points, -1/4)
+        omega_min = SupercriticalHopf.recommended_param_ranges[1][0]; omega_max = SupercriticalHopf.recommended_param_ranges[1][1]
+        omega = np.linspace(omega_min, omega_max, n_points)
+        b_min = SupercriticalHopf.recommended_param_ranges[2][0]; b_max = SupercriticalHopf.recommended_param_ranges[2][1]
+        b = np.linspace(b_min, b_max, n_points)
+        return [pd.DataFrame({r'$\mu$': mu1, 
+                             r'$\omega$': omega, 
+                             r'$b$': b}), 
+                pd.DataFrame({r'$\mu$': mu2, 
+                             r'$\omega$': omega, 
+                             r'$b$': b})]
 ########################################################## more complex systems ######################################################################
 
 
@@ -1363,3 +1446,4 @@ class Repressilator(FlowSystemODE):
         df_lower = df_lower[(df_lower[r'$b$'] > b_min) & (df_lower[r'$b$'] < b_max)]
         df_upper = df_upper[(df_upper[r'$b$'] > b_min) & (df_upper[r'$b$'] < b_max)]
         return [df_lower, df_upper]
+

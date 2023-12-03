@@ -70,6 +70,9 @@ cyc_attr_idx = 1 # index of Cycle label
 def topo_point_vs_cycle(topo=None):
     """
     Return True if the topology is a cycle, False if it is a point.
+    [1,0] - Point
+    [0,1] - Cycle
+    
     """
     topo_values = {'Point': [topo_attractor, topo_attr_spiral],
                    'Periodic': [topo_period_attr]}

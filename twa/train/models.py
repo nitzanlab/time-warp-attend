@@ -63,7 +63,7 @@ class AttentionwFC_classify(nn.Module):
     https://github.com/heykeetae/Self-Attention-GAN
     """
     def __init__(self, in_shape, out_shape, latent_dim=latent_dim_default, with_attention=True, dropout_rate=dropout_rate_default, 
-                 kernel_size=kernel_size_default, conv_dim=conv_dim_default, nconv_layers=nconv_layers_default):
+                 kernel_size=kernel_size_default, conv_dim=conv_dim_default, nconv_layers=nconv_layers_default, **kwargs):
         
         super(AttentionwFC_classify, self).__init__()
         self.in_shape = in_shape
@@ -252,7 +252,7 @@ class FC_classify(nn.Module):
     """
     Basic FC net
     """
-    def __init__(self, in_shape, out_shape, latent_dim=latent_dim_default, dropout_rate=dropout_rate_default):
+    def __init__(self, in_shape, out_shape, **kwargs):
         
         super(FC_classify, self).__init__()
         if isinstance(in_shape, list):
@@ -286,9 +286,8 @@ class AE(nn.Module):
             num_conv_layers=3, kernel_sizes=3*[kernel_size_default], kernel_features=3*[128],
             pooling_sizes=[],
             strides = 3*[2],
-            num_fc_hid_layers=0, fc_hid_dims=[],
             batch_norm=False, dropout=False, dropout_rate=.5, activation_type='relu',
-            finetune=False, min_dims=None, max_dims=None, poly_order=None, **kwargs):
+            finetune=False, **kwargs):
 
         super(AE, self).__init__()
         self.finetune = finetune
@@ -379,7 +378,7 @@ class CNNwFC_exp_emb(nn.Module):
             num_fc_hid_layers=0, fc_hid_dims=[],
             min_dims=[-1.,-1.],
             max_dims=[1.,1.],
-            batch_norm=False, dropout=False, dropout_rate=.5, activation_type='relu', last_pad=None):
+            batch_norm=False, dropout=False, dropout_rate=.5, activation_type='relu', last_pad=None, **kwargs):
 
         super(CNNwFC_exp_emb, self).__init__()
 

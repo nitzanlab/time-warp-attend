@@ -52,7 +52,7 @@ help="Generates a data set of vector fields.")
 @click.option('--noise-type', '-nt', type=click.Choice([None, 'gaussian', 'masking', 'parameter', 'trajectory']), default=None)
 @click.option('--noise-mag', '-n', type=float, default=0.0)
 @click.option('--add-sand', '-sand', is_flag=True, default=False)
-
+@click.option('--add-traj', '-traj', is_flag=True, default=False)
 @click.option('--augment-type', '-at', type=click.Choice([None, 'NSF_CL']), default=None)
 @click.option('--augment-ntries', type=int, default=10, help="Number of times to try to augment each sample")
 @click.option('--NSF-B', type=float, default=4, help="Range being warped by NSF")
@@ -63,7 +63,7 @@ help="Generates a data set of vector fields.")
 @click.option('--seed', '-se', type=int, default=0)
 @click.option('--config-file', type=click.Path())
 def generate_dataset(data_dir, data_name, train_size, test_size, sampler_type, num_lattice, min_dims, max_dims, labels, 
-param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf_b, nsf_k, nsf_hd, device, seed, config_file):
+param_ranges, noise_type, noise_mag, add_sand, add_traj, augment_type, augment_ntries, nsf_b, nsf_k, nsf_hd, device, seed, config_file):
     """
     Generates train and test data for one data set
 
@@ -99,6 +99,7 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
                             noise_level=noise_mag,
                             sampler_type=sampler_type, 
                             add_sand=add_sand,
+                            add_traj=add_traj,
                             augment_type=augment_type, 
                             augment_ntries=augment_ntries,
                             B=nsf_b, K=nsf_k, hidden_dim=nsf_hd,)
@@ -108,12 +109,16 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
     DEs_pert = res['DEs_pert']
     poly_params_pert = res['poly_params_pert']
     sand_pert = res['sand_pert']
+    trajs_pert = res['trajs_pert']
     fixed_pts_pert = res['fixed_pts_pert']
     dists_pert = res['dists_pert']
     topos_pert = res['topos_pert']
 
     savenames = ['X', 'p', 'sysp', 'fixed_pts', 'dists', 'topo']
     split = [vectors_pert, poly_params_pert, params_pert, fixed_pts_pert, dists_pert, topos_pert]
+    if add_traj:
+        savenames += ['trajs']
+        split += [trajs_pert]
 
     if add_sand:
         savenames += ['sand']
@@ -133,6 +138,7 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
     sf_info = sf.get_sf_info()
     sf_info['data_dir'] = data_dir
     sf_info['with_sand'] = add_sand
+    sf_info['with_traj'] = add_traj
     sf_info['noise_type'] = noise_type
     if noise_type is not None:
         sf_info['noise_level'] = noise_mag
@@ -165,6 +171,7 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
 @click.option('--kernel-size', type=int, default=3)
 @click.option('--latent-dim', type=int, default=10)
 @click.option('--batch-size', type=int, default=64)
+@click.option('--conv-layers', type=int, default=4)
 @click.option('--conv-dim', type=int, default=64)
 @click.option('--datasize', type=int, default=10000)
 @click.option('--lr', type=float, default=1e-4)
@@ -178,8 +185,9 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
                                                         'lienard_sigmoid',
                                                         'vanderpol',
                                                         'suphopf',
+                                                        'subhopf',
                                                         'bzreaction',
-                                                        'selkov',
+                                                        'selkov2',
                                                         'pancreas_clusters_random_bin',
                                                         'repressilator',
                                                         ])
@@ -188,7 +196,7 @@ param_ranges, noise_type, noise_mag, add_sand, augment_type, augment_ntries, nsf
 @click.option('--pretrained-path', type=str)
 @click.option('--config-file', type=click.Path())
 def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_attention, test_data_descs, test_noise, repeats, dont_save, verbose, dropout_rate, 
-               kernel_size, latent_dim, batch_size, conv_dim, datasize, lr, num_epochs, desc, seed, device, pretrained_path, config_file):
+               kernel_size, latent_dim, batch_size, conv_layers, conv_dim, datasize, lr, num_epochs, desc, seed, device, pretrained_path, config_file):
     """
     Train vector field topology classifier.
     """
@@ -232,6 +240,7 @@ def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_atte
                     'kernel_size': kernel_size,
                     'latent_dim': latent_dim,
                     'batch_size': batch_size,
+                    'conv_layers': conv_layers, 
                     'conv_dim': conv_dim,
                     'datasize': datasize,
                     'lr': lr,
@@ -255,13 +264,38 @@ def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_atte
                 print(f'Could not load {test_data_dir}')
                 continue
             test_datasets[test_data_desc] = test_dataset
+
+            try:
+                test_dataset = VecTopoDataset(test_data_dir, tt=tt, datatype=datatype, noise=0.1)
+            except:
+                print(f'Could not load {test_data_dir}')
+                continue
+            test_datasets[test_data_desc + '_noise0.1'] = test_dataset
+
+
+            try:
+                test_dataset = VecTopoDataset(test_data_dir, tt=tt, datatype=datatype, noise=0.2)
+            except:
+                print(f'Could not load {test_data_dir}')
+                continue
+            test_datasets[test_data_desc + '_noise0.2'] = test_dataset
+
+
+            try:
+                test_dataset = VecTopoDataset(test_data_dir, tt=tt, datatype=datatype, noise=0.3)
+            except:
+                print(f'Could not load {test_data_dir}')
+                continue
+            test_datasets[test_data_desc + '_noise0.3'] = test_dataset
+
+
         else:
             print(f'{test_data_dir} does not exist')
         
     # optional: adding noise/mask testing
     if test_noise:
         noises = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
-        mask_probs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3,0.35, 0.4, 0.45, 0.5]
+        # mask_probs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3,0.35, 0.4, 0.45, 0.5]
         test_data_desc_base = train_data_desc
         test_data_dir = os.path.join(data_dir, test_data_desc_base)
         
@@ -270,10 +304,10 @@ def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_atte
             test_dataset = VecTopoDataset(test_data_dir,  tt=tt, datatype=datatype, noise=noise) 
             test_datasets[test_data_desc] = test_dataset
         
-        for mask_prob in mask_probs:
-            test_data_desc = test_data_desc_base + '_masked%.2f' % mask_prob
-            test_dataset = VecTopoDataset(test_data_dir,  tt=tt, datatype=datatype, mask_prob=mask_prob) 
-            test_datasets[test_data_desc] = test_dataset
+        # for mask_prob in mask_probs:
+        #     test_data_desc = test_data_desc_base + '_masked%.2f' % mask_prob
+        #     test_dataset = VecTopoDataset(test_data_dir,  tt=tt, datatype=datatype, mask_prob=mask_prob) 
+        #     test_datasets[test_data_desc] = test_dataset
 
 
     for i in range(repeats):
@@ -290,7 +324,7 @@ def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_atte
                 train_dataset += VecTopoDataset(train_data_dir, datatype=datatype, datasize=datasize, filter_outbound=True)
 
         model, _ = train_model_alt(train_dataset, model_type=model_type, with_attention=with_attention, lr=lr, kernel_size=kernel_size, num_epochs=num_epochs,
-                      dropout_rate=dropout_rate, batch_size=batch_size, conv_dim=conv_dim, device=device, verbose=verbose, latent_dim=latent_dim, pretrained_path=pretrained_path)
+                      dropout_rate=dropout_rate, batch_size=batch_size, conv_layers=conv_layers, conv_dim=conv_dim, device=device, verbose=verbose, latent_dim=latent_dim, pretrained_path=pretrained_path)
         
 
         # evaluate on test data

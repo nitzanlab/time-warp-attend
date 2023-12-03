@@ -182,4 +182,4 @@ def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None,
         write_yaml(os.path.join(save_dir, f'training_results.yaml'), res)
         print('Saved predictions to: {}'.format(save_dir))
 
-    return correct, auc, outputs 
+    return correct, auc, outputs

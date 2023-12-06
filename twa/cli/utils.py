@@ -34,7 +34,9 @@ def command_with_config(config_file_param_name: str) -> Type[click.Command]:
     """
 
     class custom_command_class(click.Command):
-
+        """ 
+        Custom click.Command class that accepts a configuration file
+        """
         def invoke(self, ctx):
             # grab the config file
             config_file = ctx.params[config_file_param_name]
@@ -69,14 +71,15 @@ def command_with_config(config_file_param_name: str) -> Type[click.Command]:
 
 
 def get_command_defaults(command: click.Command):
-    """ Get the default values for the options of `command`
+    """ 
+    Get the default values for the options of `command`
     """
     return {tmp.name: tmp.default for tmp in command.params if not tmp.required}
 
 
 def get_last_config(fname, suffix=''):
     """
-
+    Get the last config file in a directory
     """
     if os.path.isfile(fname):
         return fname

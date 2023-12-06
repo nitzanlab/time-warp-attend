@@ -94,11 +94,6 @@ class FlowSystemODE(torch.nn.Module):
         self.min_dims = self.__class__.min_dims if min_dims is None else min_dims
         self.max_dims = self.__class__.max_dims if max_dims is None else max_dims
         
-        # self.min_dims = get_value(min_dims, self.__class__.min_dims,  [-1, ] * self.dim)
-        # self.max_dims = get_value(max_dims, self.__class__.max_dims,  [1, ] * self.dim)
-        
-        # self.min_dims = min_dims if min_dims is not None else [-1, ] * self.dim
-        # self.max_dims = max_dims if max_dims is not None else [1, ] * self.dim
         self.boundary_type = boundary_type
         self.boundary_radius = torch.tensor(boundary_radius).float()
         self.boundary_gain = torch.tensor(boundary_gain).float()
@@ -118,8 +113,6 @@ class FlowSystemODE(torch.nn.Module):
         assert len(self.min_dims) == self.dim, 'min_dims must be of length dim'
         assert len(self.max_dims) == self.dim, 'max_dims must be of length dim'
         assert len(self.labels) == self.dim, 'labels must be of length dim'
-
-    
 
 
     def run(self, T, alpha, init=None, clip=True, time_direction=None):
@@ -171,7 +164,6 @@ class FlowSystemODE(torch.nn.Module):
         Returns a vector field of the system
         """
         if coords is None:
-            # coords = self.generate_mesh(min_dims=min_dims, max_dims=max_dims, num_lattice=num_lattice, indexing='xy').to(self.device)
             coords = self.coords_xy.to(self.device)
         dim = coords.shape[-1]
         if vectors is None:
@@ -412,7 +404,6 @@ class FlowSystemODE(torch.nn.Module):
         for trajectory in trajectories:
             traj_vectors.append(np.diff(trajectory, axis=0) / alpha)
         traj_vectors = np.array(traj_vectors).reshape(-1, self.dim)
-        # v = np.diff(trajectories, axis=0).reshape(-1, self.dim) / alpha
 
         # masking inf values
         mask = np.isfinite(traj_vectors).all(axis=1)
@@ -565,6 +556,9 @@ class FlowSystemODE(torch.nn.Module):
     ############################################################ Invariances ############################################################
     @staticmethod
     def get_bifurcation_curve():
+        """
+        Returns a list of dataframes describing the bifurcation curve
+        """
         print('Not implemented yet')
         return []
 

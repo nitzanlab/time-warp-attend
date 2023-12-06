@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import torch.nn.functional as F
 from torch import nn
-from twa.data import FlowSystemODE, Polynomial, topo_num_to_str_dict, topo_point_vs_cycle, topo_dont_know
+from twa.data import FlowSystemODE, topo_num_to_str_dict, topo_point_vs_cycle, topo_dont_know
 from twa.train.utils import permute_data, rev_permute_data
 
 

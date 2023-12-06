@@ -3,7 +3,8 @@ import pandas as pd
 from sklearn.metrics import roc_curve, auc
 
 def find_optimal_cutoff(y, pred):
-    """ Find the optimal cutoff for a binary classifier
+    """
+    Find the optimal cutoff for a binary classifier
     """
     fpr, tpr, threshold = roc_curve(y, pred)
     i = np.arange(len(tpr)) 

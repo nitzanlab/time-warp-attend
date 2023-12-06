@@ -22,14 +22,6 @@ def get_optimizer(optimizer_name, model_params, lr, momentum=0.0):
     return optimizer
 
 
-#def load_data(data_dir, tt, **kwargs):
-#    """
-#    Get dataloader
-#    """
-#    tt_dataset = SystemFamilyDataset(os.path.join(data_dir, tt, '0'))
-#    tt_loader = torch.utils.data.DataLoader(dataset=tt_dataset, **kwargs)
-#    return tt_loader
-
 def permute_data(X):
     '''Permute data to (batch, dim, ...grid...)'''
     grid_dims = len(X.shape) - 2 
@@ -154,11 +146,6 @@ def grad_status(to_train):
     else:
         return torch.no_grad()
 
-
-# def laplacian(A):
-#     '''Calculate laplacian of array'''
-#     A = F.pad(A,(0,0,1,1,1,1))
-#     return A[:-2,1:-1] + A[1:-1,:-2] - 4*A[1:-1,1:-1] + A[1:-1,2:] + A[2:,1:-1]
 
 
 

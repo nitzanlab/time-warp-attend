@@ -39,9 +39,6 @@ class SystemFamily():
         if data_name == 'simple_oscillator' or data_name == 'so':
             generator = SimpleOscillator
 
-        # elif data_name == 'point_attractor' or data_name == 'pa':
-        #     generator = PointAttractor
-
         elif data_name == 'selkov':
             generator = Selkov
 
@@ -51,32 +48,17 @@ class SystemFamily():
         elif data_name == 'subhopf':
             generator = SubcriticalHopf
 
-        elif data_name == 'prey_preditor' or data_name == 'pp':
-            generator = PreyPredator
-
         elif data_name == 'bzreaction' or data_name == 'bz':
             generator = BZreaction
 
-        elif data_name == 'fitzhugh_nagumo' or data_name == 'fn':
-            generator = FitzhughNagumo
-
         elif data_name == 'vanderpol' or data_name == 'vp':
             generator = VanDerPol
-
-        elif data_name == 'biased_vanderpol' or data_name == 'bvp':
-            generator = BiasedVanDerPol
-
-        elif data_name == 'polynomial':
-            generator = Polynomial
 
         elif data_name == 'lienard_poly':
             generator = LienardPoly
         
         elif data_name == 'lienard_sigmoid':
             generator = LienardSigmoid
-
-        elif data_name == 'infinite_period' or data_name == 'ip':
-            generator = InfinitePeriod
 
         elif data_name == 'repressilator':
             generator = Repressilator

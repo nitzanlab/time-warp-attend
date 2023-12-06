@@ -5,7 +5,6 @@ from scipy.special import binom
 def library_size(dim, poly_order, include_sine=False, include_exp=False, include_constant=True):
     """
     Calculate library size for a given polynomial order. Taken from `https://github.com/kpchamp/SindyAutoencoders`
-
     """
     l = 0
     for k in range(poly_order+1):

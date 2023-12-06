@@ -295,7 +295,6 @@ def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_atte
     # optional: adding noise/mask testing
     if test_noise:
         noises = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
-        # mask_probs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3,0.35, 0.4, 0.45, 0.5]
         test_data_desc_base = train_data_desc
         test_data_dir = os.path.join(data_dir, test_data_desc_base)
         
@@ -303,11 +302,6 @@ def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_atte
             test_data_desc = test_data_desc_base + '_noise%.2f' % noise
             test_dataset = VecTopoDataset(test_data_dir,  tt=tt, datatype=datatype, noise=noise) 
             test_datasets[test_data_desc] = test_dataset
-        
-        # for mask_prob in mask_probs:
-        #     test_data_desc = test_data_desc_base + '_masked%.2f' % mask_prob
-        #     test_dataset = VecTopoDataset(test_data_dir,  tt=tt, datatype=datatype, mask_prob=mask_prob) 
-        #     test_datasets[test_data_desc] = test_dataset
 
 
     for i in range(repeats):

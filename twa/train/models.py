@@ -5,9 +5,9 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils import weight_norm
-from .layers import MLP, CNN, dCNN, SelfAttention, SpectralNorm
-from .utils import permute_data, rev_permute_data
-from twa.data import sindy_library, FlowSystemODE, topo_num_to_str_dict, topo_point_vs_cycle #topo_attr_spiral, topo_period_attr
+from twa.train.layers import MLP, CNN, dCNN, SelfAttention, SpectralNorm
+from twa.train.utils import permute_data, rev_permute_data
+from twa.data import sindy_library, FlowSystemODE, topo_num_to_str_dict, topo_point_vs_cycle
 import matplotlib.pyplot as plt
 
 
@@ -174,7 +174,7 @@ class AttentionwFC_classify(nn.Module):
     
     def encode(self, x):
         out, _ = self.encode_cnn(x)
-        out=self.emb(out.view(-1, self.cnn_out_size)).squeeze()
+        out = self.emb(out.view(-1, self.cnn_out_size)).squeeze()
         # out = self.emb(out.reshape(-1, self.cnn_out_size)).squeeze()
         return out
     
@@ -184,34 +184,30 @@ class AttentionwFC_classify(nn.Module):
         return out.squeeze()
 
     def plot_attention(self, data, atten_layer='p1', n_samples=3, device='cuda', tit=None):
-        """Plot attention maps for a given model and data."""
+        """
+        Plot attention maps for a given model and data.
+        """
         if not self.with_attention:
             return
         
-        # model.eval()
         to_angle = self.in_shape[0] == 1
         imsize = self.imsize
         coords = np.array(np.meshgrid(np.arange(imsize), np.arange(imsize))).T[..., [1,0]]
-        # ncols = 2 if to_angle else 3
+        
         ncols = 3
         nrows = n_samples // ncols 
         fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols*5, nrows*5))
         ax = ax.flatten()
-        # idx = np.random.randint(0, len(data), n_samples)
         idx = np.arange(n_samples)
         X = data.data[idx].to(device)
         label_batch = data.label[idx].to(device)
-        # for X, label_batch in data:
         out, attns = self.encode_cnn(X)
 
         attn = attns[0] if atten_layer == 'p1' else attns[1]
 
         attn_size = int(np.sqrt(attn.shape[-1]))
         fold = imsize // attn_size
-
-        # atten_pt = atten_pt_w * attn_size + atten_pt_h
-        # num_all_classes = len(topo_num_to_str_dict)
-        # topo_idx = [topo_attr_spiral, topo_period_attr]
+        
         label_tit = list(topo_point_vs_cycle().columns)
         
         if not to_angle:
@@ -220,24 +216,17 @@ class AttentionwFC_classify(nn.Module):
         for i in range(n_samples):
             x = X[i]
             label = label_batch[i].cpu().detach().numpy()
-            atten = attn[i, :].cpu().detach().numpy().sum(axis=0)
+            atten = attn[i, :].cpu().detach().numpy().sum(axis=0) # summing over attention values
 
-            # p1,p2 are attention maps of B x N x N dimensions where N = W x H
-            # decide on a random point of interest p , 
-            # reshape p1[i,atten_pt,:] to W x H and plot it
-
-            # stretch attention map to the size of the image
-            # tit = ''.join([(topo_num_to_str_dict[tp] if (label[itp] == 1) else '') for itp, tp in enumerate(topo_idx) ]) if tit is None else tit
             tit = ' & '.join([label_tit[tp] for tp in np.where(label)[0]])
             
             if to_angle:
                 FlowSystemODE.plot_angle_image_(angle=x[0].cpu().detach().numpy(), title=tit, ax=ax[i])
 
             else:
-                # vectors = x.permute(1,2,0).detach().cpu().numpy()
                 vectors = x.detach().cpu().numpy()
                 FlowSystemODE.plot_trajectory_2d_(coords=coords, vectors=vectors, title=tit, ax=ax[i])
-                # ax[i].set_title(p2v.dt.topo_to_str(np.where(label.detach().numpy())[0]))        
+                
 
             atten = np.repeat(np.repeat(atten.reshape(attn_size, attn_size), fold, axis=0), fold, axis=1)
             # might need interpolation if not a multiple
@@ -261,22 +250,9 @@ class FC_classify(nn.Module):
             else:
                 in_shape = in_shape[0]
         self.in_shape = in_shape
-        
-        # self.emb = MLP(self.in_shape, latent_dim, dropout=True, dropout_rate=dropout_rate) 
-        # self.last = nn.Linear(latent_dim, out_shape,)
         self.last = nn.Linear(self.in_shape, out_shape,)
 
-    # def encode(self, x):
-    #     out = self.emb(x.view(-1, self.in_shape)).squeeze()
-    #     return out
-    
-    # def forward(self, x):
-    #     out = self.encode(x)
-    #     out = self.last(out)
-    #     return out.squeeze()
-
     def forward(self, x):
-        # out = self.encode(x)
         out = self.last(x)
         return out.squeeze()
 
@@ -333,17 +309,11 @@ class AE(nn.Module):
         return self.decode(self.encode(x))
 
     def encode(self, x):
-        """
-        Encode input to latent space
-        """
         x = self.enc_cnn(x[:, :self.dim,...])
         x = self.emb_mlp(x.reshape(-1, self.out_size))
         return x
 
     def decode(self, z):
-        """
-        Decode latent space to reconstruction
-        """
         return self.dec_dcnn(self.deemb_mlp(z).reshape(-1, *self.out_shape))
 
 
@@ -354,7 +324,6 @@ class AEFC_classify(nn.Module):
     def __init__(self, model_ae, model_cl, **kwargs):
         
         super(AEFC_classify, self).__init__()
-        # model_ae.parameters(require_grad=False)
         self.model_ae = model_ae
         self.model_ae.requires_grad_ = False
         self.model_cl = model_cl

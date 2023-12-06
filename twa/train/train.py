@@ -1,13 +1,12 @@
+import os
 import torch
 import time
 import numpy as np
-from torch.utils.tensorboard import SummaryWriter
-from .layers import *
-from .losses import *
-from .loaders import *
-from .models import *
-from .utils import *
-from torchdiffeq import odeint
+import torch.nn.functional as F
+from torch import nn
+from twa.train.loaders import VecTopoDataset
+from twa.train.models import load_model
+from torch.utils.data import DataLoader
 from twa.utils import ensure_dir, write_yaml
 from twa.data import topo_point_vs_cycle, pt_attr_idx
 from sklearn import metrics
@@ -17,9 +16,9 @@ from phase2vec.cli import generate_net_config
 
 
 def train_model(train_dataset, model_type=None, num_epochs=20, device='cuda', verbose=False, lr=1e-4, 
-          batch_size=64, num_lattice=64, report_interval=2, num_classes=2, **kwargs_model):
+          batch_size=64, report_interval=2, num_classes=2, **kwargs_model):
     """
-    Train a AttentionwFC_classify on the given dataset.
+    Train model on a given dataset.
     """
 
     if verbose:
@@ -62,20 +61,26 @@ def train_model(train_dataset, model_type=None, num_epochs=20, device='cuda', ve
     return model, losses
 
 
-def train_model_alt(train_dataset, model_type=None, pretrained_path=None, num_classes=2, **kwargs_train):
-    
+def train_model_alt(train_dataset, model_type=None, pretrained_path=None, num_classes=2, pretrain_data_path='../phase2vec/output/data/polynomial/', **kwargs_train):
+    """
+    Handles pretrained alternative models. Options include:
+    - vf_AEFC - vector field AE + FC
+    - p2v_AEFC - phase2vec + FC
+    Our model variations and FC of parameter representation do not require pretraining.
+    """
     kwargs_train = {} if kwargs_train is None else kwargs_train
 
     if model_type == 'vf_AEFC':
         print('Training vector field AE...')
-
-        train_data_dir2 = '../phase2vec/output/data/polynomial/'
         datatype = 'vector'
         datasize = 10000
-        train_dataset2 = VecTopoDataset(train_data_dir2, datatype=datatype, datasize=datasize)
-        model_ae, _ = train_model(train_dataset=train_dataset2, verbose=False, model_type='AE')
+        if not os.path.isdir(pretrain_data_path):
+            print('Pretrain data not found in {}'.format(pretrain_data_path))
 
-        # model_ae, losses_ae = train_model(train_dataset=train_dataset, verbose=False, model_type='AE')
+        print('Loading pretrain data from {}'.format(pretrain_data_path))
+        train_dataset2 = VecTopoDataset(pretrain_data_path, datatype=datatype, datasize=datasize)
+        model_ae, _ = train_model(train_dataset=train_dataset2, verbose=False, model_type='AE')
+        
         model_cl = load_model(model_type='FC', in_shape=model_ae.latent_dim, out_shape=num_classes)
         kwargs_train['model_ae'] = model_ae
         kwargs_train['model_cl'] = model_cl
@@ -119,7 +124,6 @@ def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None,
     num_samples = len(test_dataset)
     
     preds = []
-    # latents = []
     outputs = []
 
     if verbose:
@@ -142,12 +146,9 @@ def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None,
             pred = output > thr  # get the index of the max log-probability
             correct += pred.eq(label.view_as(pred)).all(axis=1).sum().item()
             
-            # latent = model.encode(data)
-            
-            # if save:
             outputs.append(torch.Tensor.cpu(output).detach().numpy())
             preds.append(torch.Tensor.cpu(pred).detach().numpy())
-            # latents.append(torch.Tensor.cpu(latent).detach().numpy())
+            
             
     end = time.time()
     if verbose:
@@ -162,12 +163,11 @@ def predict_model(model, test_dataset, verbose=False, save=False, save_dir=None,
         
     res = {f'{tt}_loss': test_loss, f'{tt}_accuracy': correct}
     preds = np.concatenate(preds)
-    # latents = np.concatenate(latents)
     outputs = np.concatenate(outputs)
     
     y_pt = test_dataset.label[:,0]
     pred_pt = outputs[:,0]
-    # print(y_pt.shape, pred_pt.shape)
+
     auc = None
     try:
         fpr, tpr, thresholds = metrics.roc_curve(y_pt, pred_pt)

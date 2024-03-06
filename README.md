@@ -7,7 +7,7 @@ based and struggle both to categorize qualitative dynamical regimes across diver
 systems and to generalize to real data. To address this challenge, we present here **time-warp-attend**, a
 data-driven, physically-informed deep-learning framework for classifying dynamical regimes and characterizing bifurcation boundaries based on the extraction oftopologically invariant features. We focus on the paradigmatic case of the supercritical Hopf bifurcation, which is used to model periodic dynamics across a wide range of applications. 
 
-![Time-warp-attend framework](https://github.com/nitzanlab/time-warp-attend/raw/main/.images/graphical_abs.png)
+![Time-warp-attend framework](https://github.com/nitzanlab/time-warp-attend/blob/master/.images/graphical_abs.png)
 
 For more information see paper at [ICLR 2024](https://openreview.net/forum?id=Fj7Fzm5lWL).
 

@@ -24,15 +24,11 @@ class VecTopoDataset(Dataset):
         """
 
         X = np.load(os.path.join(data_dir, f'X_{tt}.npy'))
-        # self.X = torch.tensor(X).permute(0, 3, 1, 2).type(torch.FloatTensor)
-        # TODO:temp
-        # for i in range(dim):
-        #     X[...,i] = X[...,i] / X[...,i].max(axis=(1,2), keepdims=True)
         
-        # rescale to maximum norm of 1 per vector
-        # if datatype == 'vector':
-        #     X = X / np.linalg.norm(X, axis=-1, keepdims=True)
-        #     X[np.where(np.isnan(X))] = 0.
+        if datatype == 'vector':
+            for i in range(dim):
+                X[...,i] = X[...,i] / X[...,i].max(axis=(1,2), keepdims=True)
+        
         
         self.X = permute_data(torch.tensor(X)) if X.shape[1] != dim else torch.tensor(X)
         self.angle = torch.tensor(np.arctan2(X[...,1], X[...,0])) 
@@ -45,7 +41,7 @@ class VecTopoDataset(Dataset):
         self.sysp = None
         self.params = None
         self.fixed_pts = None
-
+        self.datasize = len(self.X)
         fname = os.path.join(data_dir, f'sysp_{tt}.npy')
         if os.path.isfile(fname):
             self.sysp = np.load(fname)
@@ -56,13 +52,17 @@ class VecTopoDataset(Dataset):
             self.label = topo_point_vs_cycle(topo)
             self.label_tit = list(self.label.columns)
             self.label = self.label.values
-            self.label = torch.tensor(self.label).type(torch.IntTensor)
+            self.label = torch.tensor(self.label, dtype=torch.float16)
+        else:
+            print('Topology label is not found. Using dummy labels instead.')
+            self.label = - torch.ones(self.datasize, num_classes)
+            self.label_tit = ['dummy1', 'dummy2']
 
         self.dim = dim
         self.max_dims = max_dims
         self.min_dims = min_dims
 
-        self.datasize = len(self.X)
+        
 
         
         fname = os.path.join(data_dir, f'p_{tt}.npy')
@@ -127,7 +127,8 @@ class VecTopoDataset(Dataset):
             elif datatype == 'vector':
                 idx_mask = torch.stack((idx_mask, idx_mask), dim=1)
             self.data[idx_mask] = 0
-
+        
+        self.chans = self.data.shape[1]
 
             
     def __len__(self):
@@ -164,14 +165,23 @@ class VecTopoDataset(Dataset):
             elif self.datatype == 'vector':
                 vectors = x.detach().numpy()
                 FlowSystemODE.plot_trajectory_2d_(coords=self.coords, vectors=vectors, title=tit, ax=ax[i])
-            elif self.datatype == 'param':
-                DE = Polynomial(x)
-                DE.plot_trajectory(title=tit, ax=ax[i])
-                
-                # cb = fig.colorbar(stream.lines)
-                # cb.cla() 
+            else:
+                print(f'Plotting is not implemented for {self.datatype}.')
             ax[i].axis('off')
             
         plt.show()
 
+def join_VecTopoDatasets(data_descs, data_dir, plot=True, **kwargs):
+    """
+    Reads and combines multiple VecTopoDatasets.
 
+    """
+    for idata_desc, data_desc in enumerate(data_descs):
+        ddata_dir = os.path.join(data_dir, data_desc)
+        if idata_desc == 0:
+            dataset = VecTopoDataset(ddata_dir, **kwargs)
+            if plot:
+                dataset.plot_data()
+        else:
+            dataset += VecTopoDataset(ddata_dir, **kwargs)
+    return dataset

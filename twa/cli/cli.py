@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import time
 
-from twa.train import predict_model, VecTopoDataset, train_model_alt
+from twa.train import predict_model, VecTopoDataset, train_model_alt, join_VecTopoDatasets
 from .utils import command_with_config
 from twa.utils import ensure_dir, ensure_device, write_yaml, str_to_list
 from twa.data import SystemFamily
@@ -309,14 +309,8 @@ def call_train(train_data_descs, outdir, data_dir, datatype, model_type, no_atte
         exp_desc = exp_name + '_' + str(i)
 
         # read train data
-        for itrain_data_desc, train_data_desc in enumerate(train_data_descs):
-            train_data_dir = os.path.join(data_dir, train_data_desc)
-            if itrain_data_desc == 0:
-                train_dataset = VecTopoDataset(train_data_dir, datatype=datatype, datasize=datasize, filter_outbound=True)
-                train_dataset.plot_data()
-            else:
-                train_dataset += VecTopoDataset(train_data_dir, datatype=datatype, datasize=datasize, filter_outbound=True)
-
+        train_dataset = join_VecTopoDatasets(train_data_descs, data_dir=data_dir, datatype=datatype, datasize=datasize, filter_outbound=True) 
+        
         model, _ = train_model_alt(train_dataset, model_type=model_type, with_attention=with_attention, lr=lr, kernel_size=kernel_size, num_epochs=num_epochs,
                       dropout_rate=dropout_rate, batch_size=batch_size, conv_layers=conv_layers, conv_dim=conv_dim, device=device, verbose=verbose, latent_dim=latent_dim, pretrained_path=pretrained_path)
         

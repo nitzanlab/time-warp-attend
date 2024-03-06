@@ -118,10 +118,10 @@ def plot_diverge_scale(x, y, c, xlabel='', ylabel='', colorlabel='', title='', a
     
     ax.set_xlabel(xlabel, fontsize=labelsize)
     ax.set_ylabel(ylabel, fontsize=labelsize)
-    for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(labelsize)
-    for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(labelsize)
+    # for tick in ax.xaxis.get_major_ticks():
+    #     tick.label.set_fontsize(labelsize)
+    # for tick in ax.yaxis.get_major_ticks():
+    #     tick.label.set_fontsize(labelsize)
     if add_colorbar:
         cbar = plt.colorbar(pl, ax=ax)
         cbar.ax.set_ylabel(colorlabel, rotation=270, labelpad=30)

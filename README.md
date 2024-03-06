@@ -1,18 +1,13 @@
 # Time-Warp-Attend
 
-Dynamical systems across the sciences, from electrical circuits to ecological net-
-works, undergo qualitative and often catastrophic changes in behavior, called
+Dynamical systems across the sciences, from electrical circuits to ecological networks, undergo qualitative and often catastrophic changes in behavior, called
 bifurcations, when their underlying parameters cross a threshold. Existing methods
 predict oncoming catastrophes in individual systems but are primarily time-series-
 based and struggle both to categorize qualitative dynamical regimes across diverse
 systems and to generalize to real data. To address this challenge, we present here **time-warp-attend**, a
-data-driven, physically-informed deep-learning framework for classifying dynami-
-cal regimes and characterizing bifurcation boundaries based on the extraction of
-topologically invariant features. We focus on the paradigmatic case of the super-
-critical Hopf bifurcation, which is used to model periodic dynamics across a wide
-range of applications. 
+data-driven, physically-informed deep-learning framework for classifying dynamical regimes and characterizing bifurcation boundaries based on the extraction oftopologically invariant features. We focus on the paradigmatic case of the supercritical Hopf bifurcation, which is used to model periodic dynamics across a wide range of applications. 
 
-![Time-warp-attend framework](https://github.com/nitzanlab/time-warp-attend/raw/main/.images/graphical_anb.png)
+![Time-warp-attend framework](https://github.com/nitzanlab/time-warp-attend/raw/main/.images/graphical_abs.png)
 
 For more information see paper at [ICLR 2024](https://openreview.net/forum?id=Fj7Fzm5lWL).
 
